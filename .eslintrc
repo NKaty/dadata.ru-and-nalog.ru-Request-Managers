@@ -1,0 +1,21 @@
+{
+  "root": true,
+  "extends": [
+    "standard",
+    "prettier"
+  ],
+  "rules": {
+    "space-before-function-paren": 0,
+    "semi": [
+      2,
+      "always"
+    ],
+    "prettier/prettier": ["error"]
+  },
+  "env": {
+    "node": true
+  },
+  "plugins": [
+    "prettier"
+  ]
+}
