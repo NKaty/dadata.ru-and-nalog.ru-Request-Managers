@@ -8,9 +8,15 @@ const url = 'https://suggestions.dadata.ru/suggestions/api/4_1/rs/findById/party
 const token = process.env.DADATA_API_KEY;
 const queries = Array(50).fill('7707083893');
 
+const PromiseThrottle = require('promise-throttle');
+const promiseThrottle = new PromiseThrottle({
+  requestsPerSecond: 20,
+  promiseImplementation: Promise,
+});
+
 const httpsAgent = new https.Agent({
   keepAlive: true,
-  maxSockets: 10,
+  maxSockets: 60,
 });
 
 const options = {
@@ -28,10 +34,15 @@ const makeRequest = (options, query) => {
   options.body = JSON.stringify({ query });
   return fetch(url, options);
 };
+
+const requestArray = queries.map((query) =>
+  promiseThrottle.add(makeRequest.bind(this, options, query))
+);
+
 let count = 0;
 
 console.time('time');
-Promise.allSettled(queries.map((query) => makeRequest(options, query))).then((results) => {
+Promise.allSettled(requestArray).then((results) => {
   results.forEach((result) => {
     if (result.status === 'fulfilled') console.log('fulfilled', ++count);
     if (result.status === 'rejected') console.log('rejected', ++count, result.reason);
