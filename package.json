@@ -19,8 +19,10 @@
     "prettier": "^2.0.5"
   },
   "dependencies": {
+    "axios": "^0.19.2",
     "dotenv": "^8.2.0",
     "node-fetch": "^2.6.0",
+    "promise-ratelimit": "0.0.3",
     "promise-throttle": "^1.1.0"
   },
   "scripts": {
