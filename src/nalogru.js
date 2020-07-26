@@ -4,7 +4,7 @@ const { pipeline } = require('stream');
 const { Agent } = require('https');
 const Path = require('path');
 const fetch = require('node-fetch');
-const throttle = require('promise-ratelimit')(5000);
+const throttle = require('promise-ratelimit')(500);
 
 const httpsAgent = new Agent({
   keepAlive: true,
@@ -22,6 +22,8 @@ const sendForm = async (query, page = '') => {
   params.append('query', `${query}`);
   params.append('region', '');
   params.append('PreventChromeAutocomplete', '');
+  let json;
+
   try {
     const response = await fetch(url, {
       method: 'POST',
@@ -29,20 +31,35 @@ const sendForm = async (query, page = '') => {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: params,
     });
-    const json = await response.json();
-    return json.t;
+    json = await response.json();
   } catch (err) {
-    console.log(err);
+    console.log(query, page, err);
+    return false;
   }
+  if (json && (json.captchaRequired || json.ERRORS)) {
+    console.log(query, page, 'The captcha is required.');
+    return false;
+  }
+  return json.t;
 };
 
 const getSearchResult = async (query, token, page = '') => {
+  let json;
   try {
     const response = await fetch(
       `${url}search-result/${token}?r=${new Date().getTime()}&_=${new Date().getTime()}`,
       { agent: httpsAgent }
     );
-    const json = await response.json();
+    json = await response.json();
+  } catch (err) {
+    console.log(query, page, err);
+    return false;
+  }
+  if (json && (json.captchaRequired || json.ERRORS)) {
+    console.log(query, page, 'The captcha is required.');
+    return false;
+  }
+  try {
     let docs = json.rows;
     if (page === '' || page === '1') {
       const pages = Math.ceil(docs[0].cnt / docs.length);
@@ -60,19 +77,23 @@ const getSearchResult = async (query, token, page = '') => {
               return res.value;
             } else console.log(query, res.reason);
           }),
-        ].flat(2);
+        ].flat();
       }
     }
     return docs;
   } catch (err) {
-    console.log(err);
+    console.log(query, page, err);
+    return false;
   }
 };
 
 const getPage = async (query, page) => {
   await throttle();
   const token = await sendForm(query, page);
-  return await getSearchResult(query, token, page);
+  if (!token) throw Error(`page ${page}, No token!`);
+  const results = getSearchResult(query, token, page);
+  if (!results) throw Error(`page ${page}, No documents!`);
+  return results;
 };
 
 const requestFile = async (doc) => {
@@ -82,9 +103,13 @@ const requestFile = async (doc) => {
       agent: httpsAgent,
     });
     const json = await response.json();
+    if (json && (json.captchaRequired || json.ERRORS)) {
+      throw Error('The captcha is required.');
+    }
     await waitForResponse(json.t, doc.i);
   } catch (err) {
     console.log(doc.i, err);
+    throw err;
   }
 };
 
@@ -95,10 +120,14 @@ const waitForResponse = async (token, inn) => {
       { agent: httpsAgent }
     );
     const json = await response.json();
+    if (json && (json.captchaRequired || json.ERRORS)) {
+      throw Error('The captcha is required.');
+    }
     if (json.status === 'ready') await downloadFile(token, inn);
     else setTimeout(async () => await waitForResponse(token, inn), 1000);
   } catch (err) {
     console.log(inn, err);
+    throw err;
   }
 };
 
@@ -117,7 +146,9 @@ async function getInfo(query) {
   try {
     await throttle();
     const token = await sendForm(query);
+    if (!token) return;
     const results = await getSearchResult(query, token);
+    if (!results) return;
     await Promise.allSettled(results.map((result) => requestFile(result)));
   } catch (err) {
     console.log(err);
