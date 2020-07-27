@@ -1,26 +1,35 @@
 const { createWriteStream } = require('fs');
-const util = require('util');
+const { promisify } = require('util');
 const { pipeline } = require('stream');
 const { Agent } = require('https');
-const Path = require('path');
+const { resolve } = require('path');
 const fetch = require('node-fetch');
-const throttle = require('promise-ratelimit')(500);
+const throttle = require('promise-ratelimit')(1000);
 
 const httpsAgent = new Agent({
   keepAlive: true,
   maxSockets: 1,
 });
 
-const streamPipeline = util.promisify(pipeline);
+const streamPipeline = promisify(pipeline);
+
+const queries = [
+  '1659096539',
+  '5043052387',
+  '7804671668',
+  '7724322990',
+  '3808202740',
+  '1650391240',
+];
 
 const url = 'https://egrul.nalog.ru/';
 
-const sendForm = async (query, page = '') => {
+const sendForm = async (query, region, page = '') => {
   const params = new URLSearchParams();
   params.append('vyp3CaptchaToken', '');
   params.append('page', `${page}`);
   params.append('query', `${query}`);
-  params.append('region', '');
+  params.append('region', `${region}`);
   params.append('PreventChromeAutocomplete', '');
   let json;
 
@@ -33,17 +42,17 @@ const sendForm = async (query, page = '') => {
     });
     json = await response.json();
   } catch (err) {
-    console.log(query, page, err);
+    console.log(query, region, page, err);
     return false;
   }
   if (json && (json.captchaRequired || json.ERRORS)) {
-    console.log(query, page, 'The captcha is required.');
+    console.log(query, region, page, 'The captcha is required.');
     return false;
   }
   return json.t;
 };
 
-const getSearchResult = async (query, token, page = '') => {
+const getSearchResult = async (query, region, token, page = '') => {
   let json;
   try {
     const response = await fetch(
@@ -52,11 +61,11 @@ const getSearchResult = async (query, token, page = '') => {
     );
     json = await response.json();
   } catch (err) {
-    console.log(query, page, err);
+    console.log(query, region, page, err);
     return false;
   }
   if (json && (json.captchaRequired || json.ERRORS)) {
-    console.log(query, page, 'The captcha is required.');
+    console.log(query, region, page, 'The captcha is required.');
     return false;
   }
   try {
@@ -68,31 +77,31 @@ const getSearchResult = async (query, token, page = '') => {
           Array(pages - 1)
             .fill()
             .map((e, i) => i + 2)
-            .map((page) => getPage(query, page))
+            .map((page) => getPage(query, region, page))
         );
         docs = [
           ...docs,
           ...results.map((res) => {
             if (res.status === 'fulfilled') {
               return res.value;
-            } else console.log(query, res.reason);
+            } else console.log(res.reason);
           }),
         ].flat();
       }
     }
     return docs;
   } catch (err) {
-    console.log(query, page, err);
+    console.log(query, region, page, err);
     return false;
   }
 };
 
-const getPage = async (query, page) => {
+const getPage = async (query, region, page) => {
   await throttle();
-  const token = await sendForm(query, page);
-  if (!token) throw Error(`page ${page}, No token!`);
-  const results = getSearchResult(query, token, page);
-  if (!results) throw Error(`page ${page}, No documents!`);
+  const token = await sendForm(query, region, page);
+  if (!token) throw Error(`query: ${query}, region: ${region}, page: ${page}, No token!`);
+  const results = getSearchResult(query, region, token, page);
+  if (!results) throw Error(`query: ${query}, region: ${region}, page: ${page}, No documents!`);
   return results;
 };
 
@@ -134,7 +143,7 @@ const waitForResponse = async (token, inn) => {
 const downloadFile = async (token, inn) => {
   try {
     const response = await fetch(`${url}vyp-download/${token}`, { agent: httpsAgent });
-    const path = Path.resolve(__dirname, `../docs/${inn}.pdf`);
+    const path = resolve(__dirname, `../docs/${inn}.pdf`);
     const writable = createWriteStream(path);
     await streamPipeline(response.body, writable);
   } catch (err) {
@@ -142,17 +151,34 @@ const downloadFile = async (token, inn) => {
   }
 };
 
-async function getInfo(query) {
+const getDoc = async (params) => {
+  let query, region;
+  if (typeof params === 'string') {
+    query = params;
+    region = '';
+  } else {
+    query = params.query;
+    region = params.region;
+  }
+
   try {
     await throttle();
-    const token = await sendForm(query);
+    const token = await sendForm(query, region);
     if (!token) return;
-    const results = await getSearchResult(query, token);
+    const results = await getSearchResult(query, region, token);
     if (!results) return;
     await Promise.allSettled(results.map((result) => requestFile(result)));
   } catch (err) {
     console.log(err);
   }
-}
+};
 
-getInfo('компот');
+const getDocs = async (queries) => {
+  await Promise.allSettled(queries.map((query) => getDoc(query)));
+};
+
+if (module.parent) {
+  module.exports = getDocs;
+} else {
+  getDocs(queries).catch(console.log);
+}
