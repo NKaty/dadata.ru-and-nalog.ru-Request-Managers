@@ -4,7 +4,7 @@ const { pipeline } = require('stream');
 const { Agent } = require('https');
 const { resolve } = require('path');
 const fetch = require('node-fetch');
-const throttle = require('promise-ratelimit')(1000);
+const throttle = require('promise-ratelimit')(2000);
 
 const httpsAgent = new Agent({
   keepAlive: true,
@@ -20,6 +20,7 @@ const queries = [
   '7724322990',
   '3808202740',
   '1650391240',
+  '7707083893',
 ];
 
 const url = 'https://egrul.nalog.ru/';
@@ -69,27 +70,32 @@ const getSearchResult = async (query, region, token, page = '') => {
     return false;
   }
   try {
-    let docs = json.rows;
-    if (page === '' || page === '1') {
-      const pages = Math.ceil(docs[0].cnt / docs.length);
-      if (pages > 1) {
-        const results = await Promise.allSettled(
-          Array(pages - 1)
-            .fill()
-            .map((e, i) => i + 2)
-            .map((page) => getPage(query, region, page))
-        );
-        docs = [
-          ...docs,
-          ...results.map((res) => {
-            if (res.status === 'fulfilled') {
-              return res.value;
-            } else console.log(res.reason);
-          }),
-        ].flat();
+    if (json.status === 'wait') {
+      console.log(json);
+      return setTimeout(async () => await getSearchResult(query, region, token, page), 1000);
+    } else {
+      let docs = json.rows;
+      if (page === '' || page === '1') {
+        const pages = Math.ceil(docs[0].cnt / docs.length);
+        if (pages > 1) {
+          const results = await Promise.allSettled(
+            Array(pages - 1)
+              .fill()
+              .map((e, i) => i + 2)
+              .map((page) => getPage(query, region, page))
+          );
+          docs = [
+            ...docs,
+            ...results.map((res) => {
+              if (res.status === 'fulfilled') {
+                return res.value;
+              } else console.log(res.reason);
+            }),
+          ].flat();
+        }
       }
+      return docs;
     }
-    return docs;
   } catch (err) {
     console.log(query, region, page, err);
     return false;
