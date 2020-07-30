@@ -10,5 +10,7 @@ const queries = [
   '1513041445',
   '7707083893',
 ];
+
 const downloader = new MultiDownloader();
-downloader.getDocs(queries).catch(console.log);
+// downloader.getDocs(queries).catch(console.log);
+downloader.getMetaObject(queries).then(console.log).catch(console.log);

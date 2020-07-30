@@ -18,6 +18,18 @@ class Downloader {
       });
     this.throttle = ratelimit(options.pause || 2000);
     this.url = 'https://egrul.nalog.ru/';
+    this.map = {
+      g: 'management',
+      n: 'full_name',
+      c: 'short_name',
+      a: 'address',
+      o: 'ogrn',
+      r: 'ogrn_date',
+      i: 'inn',
+      p: 'kpp',
+      e: 'liquidation_date',
+      v: 'invalidation_date',
+    };
   }
 
   async _sendForm(query, region, page = '') {
@@ -91,10 +103,9 @@ class Downloader {
             );
             docs = [
               ...docs,
-              ...results.map((res) => {
-                if (res.status === 'fulfilled') {
-                  return res.value;
-                } else console.log(res.reason);
+              ...results.map((result) => {
+                if (result.status === 'fulfilled') return result.value;
+                else console.log(result.reason);
               }),
             ].flat();
           }
@@ -165,6 +176,45 @@ class Downloader {
   _getRequestParams(params) {
     if (typeof params === 'string') return [params, ''];
     else return [params.query, params.region];
+  }
+
+  async getMetaData(params) {
+    const [query, region] = this._getRequestParams(params);
+
+    try {
+      await this.throttle();
+      const token = await this._sendForm(query, region);
+      if (!token) return [];
+      const results = await this._getSearchResult(query, region, token);
+      return results || [];
+    } catch (err) {
+      console.log(err);
+      return [];
+    }
+  }
+
+  convertMetaData(data) {
+    return data.map((item) => {
+      return Object.keys(item).reduce((acc, field) => {
+        if (field in this.map) {
+          if (field === 'g') {
+            const subFields = item[field].split(': ');
+            acc[this.map[field]] = {
+              post: subFields[0],
+              name: subFields[1],
+            };
+          } else {
+            acc[this.map[field]] = item[field];
+          }
+        }
+        return acc;
+      }, {});
+    });
+  }
+
+  async getMetaObject(params) {
+    const data = await this.getMetaData(params);
+    return this.convertMetaData(data);
   }
 
   async getDocs(params) {

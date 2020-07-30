@@ -20,6 +20,33 @@ class MultiDownloader {
       console.log(err);
     }
   }
+
+  async getMetaData(queries) {
+    let data = [];
+    try {
+      const results = await Promise.allSettled(
+        queries.map((query) => this.downloader.getMetaData(query))
+      );
+      data = results
+        .map((result) => {
+          if (result.status === 'fulfilled') return result.value;
+          else console.log(result.reason);
+        })
+        .flat();
+    } catch (err) {
+      console.log(err);
+    }
+    return data;
+  }
+
+  convertMetaData(data) {
+    return this.downloader.convertMetaData(data);
+  }
+
+  async getMetaObject(queries) {
+    const data = await this.getMetaData(queries);
+    return this.convertMetaData(data);
+  }
 }
 
 module.exports = MultiDownloader;
