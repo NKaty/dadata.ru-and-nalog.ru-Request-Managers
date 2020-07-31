@@ -9,20 +9,25 @@ class MultiDownloader {
         keepAlive: true,
         maxSockets: options.sockets || 1,
       });
-    this.pause = options.pause || 2000;
-    this.downloader = new Downloader({ httpsAgent: this.httpsAgent, pause: this.pause });
+    this.downloader = new Downloader({
+      path: options.path,
+      httpsAgent: this.httpsAgent,
+      pause: options.pause,
+      logger: options.logger,
+    });
   }
 
   async getDocs(queries) {
     try {
       await Promise.allSettled(queries.map((query) => this.downloader.getDocs(query)));
     } catch (err) {
-      console.log(err);
+      this.logger.log(err);
     }
   }
 
   async getMetaData(queries) {
     let data = [];
+
     try {
       const results = await Promise.allSettled(
         queries.map((query) => this.downloader.getMetaData(query))
@@ -30,11 +35,11 @@ class MultiDownloader {
       data = results
         .map((result) => {
           if (result.status === 'fulfilled') return result.value;
-          else console.log(result.reason);
+          else this.logger.log(result.reason);
         })
         .flat();
     } catch (err) {
-      console.log(err);
+      this.logger.log(err);
     }
     return data;
   }

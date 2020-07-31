@@ -10,13 +10,16 @@ const streamPipeline = promisify(pipeline);
 
 class Downloader {
   constructor(options = {}) {
+    this.path = options.path || '';
     this.httpsAgent =
       options.httpsAgent ||
       new Agent({
         keepAlive: true,
         maxSockets: options.sockets || 1,
       });
-    this.throttle = ratelimit(options.pause || 2000);
+    this.pause = options.pause === null || options.pause === undefined ? 1500 : options.pause;
+    this.throttle = ratelimit(this.pause);
+    this.logger = options.logger || console;
     this.url = 'https://egrul.nalog.ru/';
     this.map = {
       g: 'management',
@@ -49,15 +52,16 @@ class Downloader {
         body: params,
       });
       json = await response.json();
+
+      if (json && (json.captchaRequired || json.ERRORS)) {
+        throw Error('The captcha is required.');
+      }
+
+      return json.t;
     } catch (err) {
-      console.log(query, region, page, err);
+      this.logger.log(err, query, region, page);
       return false;
     }
-    if (json && (json.captchaRequired || json.ERRORS)) {
-      console.log(query, region, page, 'The captcha is required.');
-      return false;
-    }
-    return json.t;
   }
 
   async _getSearchResult(query, region, token, page = '') {
@@ -68,24 +72,24 @@ class Downloader {
         { agent: this.httpsAgent }
       );
       json = await response.json();
+
+      if (json && (json.captchaRequired || json.ERRORS)) {
+        throw Error('The captcha is required.');
+      }
     } catch (err) {
-      console.log(query, region, page, err);
+      this.logger.log(err, query, region, page);
       return false;
     }
-    if (json && (json.captchaRequired || json.ERRORS)) {
-      console.log(query, region, page, 'The captcha is required.');
-      return false;
-    }
+
     try {
       if (json.status === 'wait') {
-        console.log(json);
         return new Promise((resolve) =>
           setTimeout(async () => {
             try {
               const results = await this._getSearchResult(query, region, token, page);
               resolve(results);
             } catch (err) {
-              console.log(query, region, page, err);
+              this.logger.log(err, query, region, page);
               resolve(false);
             }
           }, 1000)
@@ -105,7 +109,7 @@ class Downloader {
               ...docs,
               ...results.map((result) => {
                 if (result.status === 'fulfilled') return result.value;
-                else console.log(result.reason);
+                else this.logger.log(result.reason);
               }),
             ].flat();
           }
@@ -113,7 +117,7 @@ class Downloader {
         return docs;
       }
     } catch (err) {
-      console.log(query, region, page, err);
+      this.logger.log(err, query, region, page);
       return false;
     }
   }
@@ -121,9 +125,9 @@ class Downloader {
   async _getPage(query, region, page) {
     await this.throttle();
     const token = await this._sendForm(query, region, page);
-    if (!token) throw Error(`query: ${query}, region: ${region}, page: ${page}, No token!`);
+    if (!token) throw Error(`${query} ${region} ${page} No token!`);
     const results = await this._getSearchResult(query, region, token, page);
-    if (!results) throw Error(`query: ${query}, region: ${region}, page: ${page}, No documents!`);
+    if (!results) throw Error(`${query} ${region} ${page} No documents!`);
     return results;
   }
 
@@ -139,7 +143,7 @@ class Downloader {
       }
       await this._waitForResponse(json.t, doc.i);
     } catch (err) {
-      console.log(doc.i, err);
+      this.logger.log(err, doc.i);
       throw err;
     }
   }
@@ -157,7 +161,7 @@ class Downloader {
       if (json.status === 'ready') await this._downloadFile(token, inn);
       else setTimeout(async () => await this._waitForResponse(token, inn), 1000);
     } catch (err) {
-      console.log(inn, err);
+      this.logger.log(err, inn);
       throw err;
     }
   }
@@ -165,11 +169,12 @@ class Downloader {
   async _downloadFile(token, inn) {
     try {
       const response = await fetch(`${this.url}vyp-download/${token}`, { agent: this.httpsAgent });
-      const path = resolve(__dirname, `../../docs/${inn}.pdf`);
+      const path = resolve(this.path, `${inn}.pdf`);
       const writable = createWriteStream(path);
       await streamPipeline(response.body, writable);
+      this.logger.log(`${inn}.pdf is downloaded.`);
     } catch (err) {
-      console.log(inn, err);
+      this.logger.log(err, inn);
     }
   }
 
@@ -188,13 +193,14 @@ class Downloader {
       const results = await this._getSearchResult(query, region, token);
       return results || [];
     } catch (err) {
-      console.log(err);
+      this.logger.log(err, query, region);
       return [];
     }
   }
 
   convertMetaData(data) {
     return data.map((item) => {
+      this.logger.log(`${item.i} Meta data is received.`);
       return Object.keys(item).reduce((acc, field) => {
         if (field in this.map) {
           if (field === 'g') {
@@ -228,7 +234,7 @@ class Downloader {
       if (!results) return;
       await Promise.allSettled(results.map((result) => this._requestFile(result)));
     } catch (err) {
-      console.log(err);
+      this.logger.log(err, query, region);
     }
   }
 }

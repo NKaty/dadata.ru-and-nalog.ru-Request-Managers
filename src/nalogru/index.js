@@ -1,4 +1,6 @@
+const { resolve } = require('path');
 const MultiDownloader = require('./MultiDownloader');
+const Logger = require('../Logger');
 
 const queries = [
   '1659096539',
@@ -11,6 +13,14 @@ const queries = [
   '7707083893',
 ];
 
-const downloader = new MultiDownloader();
-// downloader.getDocs(queries).catch(console.log);
-downloader.getMetaObject(queries).then(console.log).catch(console.log);
+const logger = new Logger(
+  resolve(__dirname, `../../logs/error.log`),
+  resolve(__dirname, `../../logs/success.log`),
+  'a'
+);
+const downloader = new MultiDownloader({
+  path: resolve(__dirname, `../../docs`),
+  logger,
+});
+downloader.getDocs(queries).catch(logger.log);
+// downloader.getMetaObject(queries).then(console.log).catch(logger.log);
