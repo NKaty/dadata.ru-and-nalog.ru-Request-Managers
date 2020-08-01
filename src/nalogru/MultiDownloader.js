@@ -9,11 +9,12 @@ class MultiDownloader {
         keepAlive: true,
         maxSockets: options.sockets || 1,
       });
+    this.logger = options.logger || console;
     this.downloader = new Downloader({
       path: options.path,
       httpsAgent: this.httpsAgent,
       pause: options.pause,
-      logger: options.logger,
+      logger: this.logger,
     });
   }
 
@@ -33,10 +34,10 @@ class MultiDownloader {
         queries.map((query) => this.downloader.getMetaData(query))
       );
       data = results
-        .map((result) => {
-          if (result.status === 'fulfilled') return result.value;
-          else this.logger.log(result.reason);
-        })
+        .reduce((acc, result) => {
+          if (result.status === 'fulfilled') acc.push(result.value);
+          return acc;
+        }, [])
         .flat();
     } catch (err) {
       this.logger.log(err);

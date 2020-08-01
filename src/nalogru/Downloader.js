@@ -107,10 +107,11 @@ class Downloader {
             );
             docs = [
               ...docs,
-              ...results.map((result) => {
-                if (result.status === 'fulfilled') return result.value;
+              ...results.reduce((acc, result) => {
+                if (result.status === 'fulfilled') acc.push(result.value);
                 else this.logger.log(result.reason);
-              }),
+                return acc;
+              }, []),
             ].flat();
           }
         }
