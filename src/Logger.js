@@ -7,7 +7,7 @@ class Logger {
   }
 
   log(message, ...args) {
-    const info = `${args.join(', ')} `;
+    const info = args.length ? `${args.join(', ')} ` : '';
     if (message instanceof Error) {
       console.log(`${info}${message.stack}`);
       this.errorFileStream && this.errorFileStream.write(`${info}${message}\n`);
