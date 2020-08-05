@@ -2,4 +2,7 @@
 /.idea
 /docs
 /logs
+/input
+/output
+/config
 .env
