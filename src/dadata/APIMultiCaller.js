@@ -1,6 +1,7 @@
 const { Agent } = require('https');
 const PromiseThrottle = require('promise-throttle');
 const APICaller = require('./APICaller');
+const { RequestError } = require('./customErrors');
 
 class APIMultiCaller {
   constructor(options = {}) {
@@ -31,10 +32,14 @@ class APIMultiCaller {
   async makeRequests(queries) {
     const requestArray = this._getRequestArray(queries);
     const results = await Promise.allSettled(requestArray);
-    return results.reduce((acc, result) => {
-      if (result.status === 'fulfilled') acc.push(result.value);
-      return acc;
-    }, []);
+    return results.reduce(
+      (acc, result) => {
+        if (result.status === 'fulfilled') acc[0].push(result.value);
+        else if (result.reason instanceof RequestError) acc[1].push(result.reason.message);
+        return acc;
+      },
+      [[], []]
+    );
   }
 }
 

@@ -6,6 +6,10 @@ const {
   renameSync,
   readFileSync,
   writeFileSync,
+  mkdirSync,
+  readdirSync,
+  statSync,
+  rmdirSync,
 } = require('fs');
 const { createInterface } = require('readline');
 const APIMultiCaller = require('./APIMultiCaller');
@@ -15,12 +19,18 @@ class Manager {
   constructor() {
     this.inputDir = '../../input';
     this.outputDir = '../../output';
+    this.errorsDir = '../../errors';
     this.mainInputFile = 'input.txt';
+    this.errorFile = 'errors.txt';
+    this.mainInputPath = resolve(__dirname, this.inputDir, this.mainInputFile);
+    this.errorsPath = resolve(__dirname, this.errorsDir, this.errorFile);
     this.configPath = resolve(__dirname, '../../config/config.txt');
     this.currentFile = this._setCurrentFile();
-    this.innPerFile = 800;
-    this.requestsLength = 100;
+    this.innPerFile = 4;
+    this.requestsLength = 2;
+    this.cycleNumber = 4;
     this.firstJSON = true;
+    this.checkingErrors = false;
     this.logger = new Logger(
       resolve(__dirname, `../../logs/error.log`),
       resolve(__dirname, `../../logs/success.log`),
@@ -30,21 +40,58 @@ class Manager {
   }
 
   _setCurrentFile() {
-    const num =
+    const value =
       existsSync(this.configPath) && +readFileSync(this.configPath, { encoding: 'utf8' }).trim();
-    return num && !isNaN(num) ? num : 1;
+    return value && !isNaN(value) ? value : 1;
+  }
+
+  _getDate() {
+    const date = new Date();
+    return new Date(date.getTime() - date.getTimezoneOffset() * 60 * 1000)
+      .toISOString()
+      .substr(0, 23);
+  }
+
+  _moveFilesToNewDir(oldDirPath, newDir) {
+    mkdirSync(resolve(__dirname, oldDirPath, newDir));
+    const inputFiles = readdirSync(resolve(__dirname, oldDirPath));
+    let dirCount = 0;
+    inputFiles.forEach((file) => {
+      const stats = statSync(resolve(__dirname, oldDirPath, file));
+      if (stats.isFile())
+        renameSync(
+          resolve(__dirname, oldDirPath, file),
+          resolve(__dirname, oldDirPath, newDir, file)
+        );
+      else dirCount += 1;
+    });
+    return dirCount;
+  }
+
+  _startNewCycle() {
+    const date = this._getDate();
+    const dirCount = this._moveFilesToNewDir(this.inputDir, date);
+    if (dirCount >= this.cycleNumber) {
+      if (existsSync(resolve(__dirname, this.inputDir, date)))
+        rmdirSync(resolve(__dirname, this.inputDir, date));
+      process.exit(0);
+    }
+    this._moveFilesToNewDir(this.outputDir, date);
+    this.checkingErrors = false;
+    if (existsSync(this.errorsPath)) renameSync(this.errorsPath, this.mainInputPath);
   }
 
   async _processInput() {
-    const mainInputPath = resolve(__dirname, this.inputDir, this.mainInputFile);
-    if (!existsSync(mainInputPath)) return;
-    let lineCount = 0;
-    let fileCount = 1;
-
     try {
+      if (!this.checkingErrors && !existsSync(this.mainInputPath)) return;
+      if (this.checkingErrors && existsSync(this.errorsPath)) this._startNewCycle();
+
+      let lineCount = 0;
+      let fileCount = 1;
+
       let output = createWriteStream(resolve(__dirname, this.inputDir, `${fileCount}.txt`));
       const rl = createInterface({
-        input: createReadStream(mainInputPath),
+        input: createReadStream(this.mainInputPath),
         crlfDelay: Infinity,
       });
 
@@ -59,12 +106,13 @@ class Manager {
         lineCount += 1;
       }
 
-      renameSync(mainInputPath, resolve(__dirname, this.inputDir, `_${this.mainInputFile}`));
+      renameSync(this.mainInputPath, resolve(__dirname, this.inputDir, `_${this.mainInputFile}`));
 
       this.currentFile = 1;
       writeFileSync(this.configPath, `${this.currentFile}`);
     } catch (err) {
       this.logger.log(err);
+      process.exit(1);
     }
   }
 
@@ -117,18 +165,34 @@ class Manager {
   async _request(currentPath) {
     try {
       const queriesArray = await this._getQueriesArray(currentPath);
-      const output = createWriteStream(
+      const successOutput = createWriteStream(
         resolve(__dirname, this.outputDir, `${this.currentFile}.json`)
       );
+      let failureOutput = null;
 
-      output.write('[');
+      successOutput.write('[');
 
       for (const arr of queriesArray) {
-        const response = (await this.apiMultiCaller.makeRequests(arr)).flat();
-        response.forEach((item) => this._processResponse(item, output));
+        const response = await this.apiMultiCaller.makeRequests(arr);
+        const success = response[0];
+        const failure = response[1];
+        const failureRate = failure.length / (success.length + failure.length);
+
+        success.flat().forEach((item) => this._processResponse(item, successOutput));
+
+        if (failureRate > 0.5) {
+          successOutput.end('\n]\n');
+          if (failureOutput) failureOutput.end();
+          process.exit(1);
+        }
+
+        if (failure.length && !failureOutput)
+          failureOutput = createWriteStream(this.errorsPath, { flags: 'a' });
+        if (failureOutput) failure.forEach((item) => failureOutput.write(`${item}\n`));
       }
 
-      output.end('\n]\n');
+      successOutput.end('\n]\n');
+      if (failureOutput) failureOutput.end();
 
       renameSync(
         resolve(__dirname, this.inputDir, `${this.currentFile}.txt`),
@@ -138,6 +202,7 @@ class Manager {
       writeFileSync(this.configPath, this.currentFile + 1);
     } catch (err) {
       this.logger.log(err);
+      process.exit(1);
     }
   }
 
@@ -145,6 +210,10 @@ class Manager {
     await this._processInput();
     const currentPath = resolve(__dirname, this.inputDir, `${this.currentFile}.txt`);
     if (existsSync(currentPath)) await this._request(currentPath);
+    else if (existsSync(this.errorsPath)) {
+      this.checkingErrors = true;
+      await this.start();
+    }
   }
 }
 
