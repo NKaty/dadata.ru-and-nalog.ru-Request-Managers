@@ -176,11 +176,12 @@ class Manager {
         const response = await this.apiMultiCaller.makeRequests(arr);
         const success = response[0];
         const failure = response[1];
+        const stop = response[2];
         const failureRate = failure.length / (success.length + failure.length);
 
         success.flat().forEach((item) => this._processResponse(item, successOutput));
 
-        if (failureRate > 0.5) {
+        if (stop.length || failureRate > 0.5) {
           successOutput.end('\n]\n');
           if (failureOutput) failureOutput.end();
           process.exit(1);

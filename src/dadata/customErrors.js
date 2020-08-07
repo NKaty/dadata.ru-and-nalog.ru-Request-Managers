@@ -12,7 +12,15 @@ class RequestError extends Error {
   }
 }
 
+class StopError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'StopError';
+  }
+}
+
 module.exports = {
   ValidationError,
   RequestError,
+  StopError,
 };

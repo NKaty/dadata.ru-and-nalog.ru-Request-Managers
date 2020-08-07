@@ -1,6 +1,6 @@
 const fetch = require('node-fetch');
 const dotenv = require('dotenv');
-const { ValidationError, RequestError } = require('./customErrors');
+const { ValidationError, RequestError, StopError } = require('./customErrors');
 
 dotenv.config();
 
@@ -30,17 +30,36 @@ class APICaller {
   async makeRequest(query) {
     const requestBody = this._getRequestBody(query);
     const options = { ...this.requestOptions, body: JSON.stringify(requestBody) };
+
     try {
       const response = await fetch(this.url, options);
+
+      if (response.status === 403) throw new StopError('Daily request limit is exceeded.');
+      if (response.status === 429) {
+        throw new StopError('Request frequency or number of new connections is exceeded.');
+      }
+      if (
+        response.status === 400 ||
+        response.status === 401 ||
+        response.status === 405 ||
+        response.status === 413
+      ) {
+        throw new ValidationError(`Invalid request. ${response.statusText}`);
+      }
+      if (!response.ok) throw new RequestError(response.statusText);
+
       const json = await response.json();
+
       if (json.suggestions && json.suggestions.length === 0)
         throw new ValidationError('Invalid inn.');
+
       if (json.suggestions && json.suggestions[0].data)
         this.logger.log(`${json.suggestions[0].data.inn} Data is received.`);
+
       return json.suggestions;
     } catch (err) {
       this.logger.log(err, requestBody.query);
-      if (err instanceof ValidationError) throw err;
+      if (err instanceof ValidationError || err instanceof StopError) throw err;
       else throw new RequestError(requestBody.query);
     }
   }
