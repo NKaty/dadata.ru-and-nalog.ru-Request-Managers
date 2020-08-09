@@ -59,7 +59,8 @@ class APICaller {
       return json.suggestions;
     } catch (err) {
       this.logger.log(err, requestBody.query);
-      if (err instanceof ValidationError || err instanceof StopError) throw err;
+      if (err instanceof ValidationError) throw err;
+      else if (err instanceof StopError) throw new StopError(requestBody.query);
       else throw new RequestError(requestBody.query);
     }
   }
