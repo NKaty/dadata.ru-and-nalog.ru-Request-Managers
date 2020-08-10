@@ -54,14 +54,22 @@ class APICaller {
         throw new ValidationError('Invalid inn.');
 
       if (json.suggestions && json.suggestions[0].data)
-        this.logger.log(`${json.suggestions[0].data.inn} Data is received.`);
+        this.logger.log('success', `${json.suggestions[0].data.inn} Data is received.`);
+
+      if (Math.random() > 0.9) throw new RequestError(requestBody.query);
 
       return json.suggestions;
     } catch (err) {
-      this.logger.log(err, requestBody.query);
-      if (err instanceof ValidationError) throw err;
-      else if (err instanceof StopError) throw new StopError(requestBody.query);
-      else throw new RequestError(requestBody.query);
+      if (err instanceof ValidationError) {
+        this.logger.log('validationError', err, requestBody.query);
+        throw new ValidationError(requestBody.query);
+      } else if (err instanceof StopError) {
+        this.logger.log('retryError', err, requestBody.query);
+        throw new StopError(requestBody.query);
+      } else {
+        this.logger.log('retryError', err, requestBody.query);
+        throw new RequestError(requestBody.query);
+      }
     }
   }
 }

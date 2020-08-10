@@ -7,10 +7,15 @@ const {
   mkdirSync,
   readdirSync,
   unlinkSync,
+  readFileSync,
+  writeFileSync,
+  copyFileSync,
+  appendFileSync,
+  statSync,
 } = require('fs');
 const { createInterface } = require('readline');
 const APIMultiCaller = require('./APIMultiCaller');
-const Logger = require('../Logger');
+const Logger = require('./Logger');
 
 class Manager {
   constructor() {
@@ -20,8 +25,13 @@ class Manager {
     this.inputDir = '../../input';
     this.outputDir = '../../output';
     this.logsDir = '../../logs';
+    this.reportsDir = '../../reports';
     this.mainInputFile = 'input.txt';
     this.tempErrorsFile = 'errors.txt';
+    this.reportFile = 'report.txt';
+    this.statFile = 'stat.json';
+    this.errorsToRetryFile = 'errorsToRetry.txt';
+    this.validationErrorsFile = 'validationErrors.txt';
     this._tempPath = resolve(__dirname, this.tempDir);
     this._tempInputPath = resolve(this._tempPath, this.tempInputDir);
     this._tempErrorsPath = resolve(this._tempPath, this.tempErrorsDir);
@@ -30,6 +40,11 @@ class Manager {
     this._mainInputPath = resolve(this._inputPath, this.mainInputFile);
     this._outputPath = resolve(__dirname, this.outputDir);
     this._logsPath = resolve(__dirname, this.logsDir);
+    this._reportsPath = resolve(__dirname, this.reportsDir);
+    this._mainReportPath = resolve(this._reportsPath, this.reportFile);
+    this._mainStatPath = resolve(this._reportsPath, this.statFile);
+    this._mainErrorsToRetryPath = resolve(this._reportsPath, this.errorsToRetryFile);
+    this._mainValidationErrorsPath = resolve(this._reportsPath, this.validationErrorsFile);
     this.requestsPerDay = 18;
     this.innPerFile = 9;
     this.filesPerDay = Math.floor(this.requestsPerDay / this.innPerFile);
@@ -37,12 +52,21 @@ class Manager {
     this.failureRate = 0.5;
     this._repeatedFailure = false;
     this._stop = false;
+    this._stopReason = '';
     this._firstJSON = true;
     this._errorStream = null;
+    this._validationErrorStream = null;
+    this._newCycle = false;
+    this._totalRequestNumber = 0;
+    this._currentRequestNumber = 0;
+    this._successNumber = 0;
+    this._validationErrorsNumber = 0;
+    this._retryErrorsNumber = 0;
     this.logger = new Logger(
-      resolve(this._logsPath, 'error.log'),
-      resolve(this._logsPath, 'success.log'),
-      'a'
+      resolve(this._logsPath, `retryErrors_${this._getDate()}.log`),
+      resolve(this._logsPath, `validationErrors_${this._getDate()}.log`),
+      resolve(this._logsPath, `generalErrors_${this._getDate()}.log`),
+      resolve(this._logsPath, `success_${this._getDate()}.log`)
     );
     this.apiMultiCaller = new APIMultiCaller({ logger: this.logger });
     this._createDirStructure();
@@ -55,22 +79,44 @@ class Manager {
     if (!existsSync(this._inputPath)) mkdirSync(this._inputPath);
     if (!existsSync(this._outputPath)) mkdirSync(this._outputPath);
     if (!existsSync(this._logsPath)) mkdirSync(this._logsPath);
+    if (!existsSync(this._reportsPath)) mkdirSync(this._reportsPath);
   }
 
-  _getDate() {
+  _getDate(pretty = false) {
     const date = new Date();
-    return new Date(date.getTime() - date.getTimezoneOffset() * 60 * 1000)
-      .toISOString()
-      .substr(0, 23);
+    const now = new Date(date.getTime() - date.getTimezoneOffset() * 60 * 1000).toISOString();
+    if (pretty) return now.substr(0, 19).split('T').join(' ');
+    return now.substr(0, 23);
+  }
+
+  _cleanBeforeStart() {
+    if (existsSync(this._mainStatPath)) unlinkSync(this._mainStatPath);
+    if (existsSync(this._mainValidationErrorsPath)) unlinkSync(this._mainValidationErrorsPath);
+    if (existsSync(this._mainTempErrorsPath)) unlinkSync(this._mainTempErrorsPath);
+
+    const logs = readdirSync(this._logsPath);
+    logs.forEach((file) => {
+      const stat = statSync(resolve(this._logsPath, file));
+      stat.isFile() && unlinkSync(resolve(this._logsPath, file));
+    });
+
+    const tempInputs = readdirSync(this._tempInputPath);
+    tempInputs.forEach((file) => {
+      const stat = statSync(resolve(this._tempInputPath, file));
+      stat.isFile() && unlinkSync(resolve(this._tempInputPath, file));
+    });
   }
 
   async _processInput(checkingErrors) {
     try {
       let currentPath;
-      if (!checkingErrors && existsSync(this._mainInputPath)) currentPath = this._mainInputPath;
-      else if (checkingErrors && existsSync(this._mainTempErrorsPath))
+      if (!checkingErrors && existsSync(this._mainInputPath)) {
+        currentPath = this._mainInputPath;
+        this._cleanBeforeStart();
+      } else if (checkingErrors && existsSync(this._mainTempErrorsPath)) {
         currentPath = this._mainTempErrorsPath;
-      else return;
+        this._newCycle = true;
+      } else return;
 
       let lineCount = 0;
       let fileCount = 1;
@@ -82,6 +128,7 @@ class Manager {
       });
 
       for await (const line of rl) {
+        this._totalRequestNumber += 1;
         if (lineCount === this.innPerFile) {
           lineCount = 0;
           output.end();
@@ -95,7 +142,7 @@ class Manager {
       if (currentPath === this._mainTempErrorsPath) unlinkSync(this._mainTempErrorsPath);
       else renameSync(this._mainInputPath, resolve(this._inputPath, `_${this.mainInputFile}`));
     } catch (err) {
-      this.logger.log(err);
+      this.logger.log('generalError', err);
       process.exit(1);
     }
   }
@@ -149,57 +196,72 @@ class Manager {
   }
 
   async _request(currentPath) {
-    try {
-      this._firstJSON = true;
-      const queriesArray = await this._getQueriesArray(currentPath);
-      const successOutput = createWriteStream(resolve(this._outputPath, `${this._getDate()}.json`));
+    this._firstJSON = true;
+    const queriesArray = await this._getQueriesArray(currentPath);
+    const successOutput = createWriteStream(resolve(this._outputPath, `${this._getDate()}.json`));
 
-      successOutput.write('[');
+    successOutput.write('[');
 
-      for (const arr of queriesArray) {
-        if (arr.length && this._stop) {
-          if (!this._errorStream)
-            this._errorStream = createWriteStream(this._mainTempErrorsPath, { flags: 'a' });
-          arr.forEach((item) => this._errorStream.write(`${item.query}\n`));
-          continue;
-        }
-        const response = await this.apiMultiCaller.makeRequests(arr);
-        const success = response[0];
-        const failure = response[1];
-        const stop = response[2];
-        const failureRate = failure.length / (success.length + failure.length);
-
-        success.flat().forEach((item) => this._processResponse(item, successOutput));
-
-        if ((failure.length || stop.length) && !this._errorStream)
+    for (const arr of queriesArray) {
+      if (arr.length && this._stop) {
+        this._retryErrorsNumber += arr.length;
+        this._currentRequestNumber += arr.length;
+        if (!this._errorStream)
           this._errorStream = createWriteStream(this._mainTempErrorsPath, { flags: 'a' });
-        failure.forEach((item) => this._errorStream.write(`${item}\n`));
-        stop.forEach((item) => this._errorStream.write(`${item}\n`));
-
-        if (stop.length || (failureRate >= this.failureRate && this._repeatedFailure)) {
-          this._stop = true;
-        } else if (failureRate >= this.failureRate && !this._repeatedFailure) {
-          this._repeatedFailure = true;
-          await new Promise((resolve) => setTimeout(resolve, 30 * 60 * 1000));
-        } else {
-          this._repeatedFailure = false;
-        }
+        arr.forEach((item) => {
+          this._errorStream.write(`${item.query}\n`);
+          this.logger.log('retryError', this._stopReason, item.query);
+        });
+        continue;
       }
+      const response = await this.apiMultiCaller.makeRequests(arr);
+      this._currentRequestNumber += arr.length;
+      const success = response[0];
+      const requestFailure = response[1];
+      const stop = response[2];
+      const validationFailure = response[3];
+      this._successNumber += success.flat().length;
+      this._retryErrorsNumber += requestFailure.length + stop.length;
+      this._validationErrorsNumber += validationFailure.length;
+      const failureRate = requestFailure.length / (success.length + requestFailure.length);
 
-      successOutput.end('\n]\n');
+      success.flat().forEach((item) => this._processResponse(item, successOutput));
 
-      existsSync(currentPath) && unlinkSync(currentPath);
-    } catch (err) {
-      this.logger.log(err);
-      process.exit(1);
+      if ((requestFailure.length || stop.length) && !this._errorStream)
+        this._errorStream = createWriteStream(this._mainTempErrorsPath, { flags: 'a' });
+      requestFailure.forEach((item) => this._errorStream.write(`${item}\n`));
+      stop.forEach((item) => this._errorStream.write(`${item}\n`));
+
+      if (validationFailure.length && !this._validationErrorStream)
+        this._validationErrorStream = createWriteStream(this._mainValidationErrorsPath, {
+          flags: 'a',
+        });
+      validationFailure.forEach((item) => this._validationErrorStream.write(`${item}\n`));
+
+      if (stop.length || (failureRate >= this.failureRate && this._repeatedFailure)) {
+        this._stop = true;
+        this._stopReason = stop.length
+          ? 'Caused by previous StopError'
+          : 'Failure limit rate was exceeded.';
+      } else if (failureRate >= this.failureRate && !this._repeatedFailure) {
+        this._repeatedFailure = true;
+        await new Promise((resolve) => setTimeout(resolve, 0.2 * 60 * 1000));
+      } else {
+        this._repeatedFailure = false;
+      }
     }
+
+    successOutput.end('\n]\n');
+
+    existsSync(currentPath) && unlinkSync(currentPath);
   }
 
   async _requests(currentFiles) {
     for (const file of currentFiles) {
       if (this._stop) {
         if (this._errorStream) this._errorStream.end();
-        await new Promise(() => this._errorStream.on('close', () => process.exit(1)));
+        await new Promise((resolve) => this._errorStream.on('close', resolve));
+        return;
       }
       await this._request(resolve(this._tempInputPath, file));
     }
@@ -210,14 +272,111 @@ class Manager {
     return readdirSync(this._tempInputPath).slice(0, this.filesPerDay);
   }
 
+  _updateStat() {
+    let stat = existsSync(this._mainStatPath)
+      ? JSON.parse(readFileSync(this._mainStatPath, 'utf8'))
+      : null;
+    const requestInfo = {
+      requests: this._currentRequestNumber,
+      success: this._successNumber,
+      validationErrors: this._validationErrorsNumber,
+      retryErrors: this._retryErrorsNumber,
+    };
+
+    if (!stat) {
+      stat = {
+        totalRequestNumber: this._totalRequestNumber,
+        requestDays: [requestInfo],
+        retryErrorsDays: [],
+      };
+    } else {
+      if (this._newCycle || stat.retryErrorsDays.length) {
+        stat.retryErrorsDays.push(requestInfo);
+      } else {
+        stat.requestDays.push(requestInfo);
+      }
+    }
+
+    writeFileSync(this._mainStatPath, JSON.stringify(stat, null, 4));
+
+    return stat;
+  }
+
+  _processStat(stat) {
+    const requestInfo = {
+      requests: 0,
+      success: 0,
+      validationErrors: 0,
+      retryErrors: 0,
+    };
+
+    stat.requestDays.forEach((item) => {
+      Object.keys(requestInfo).forEach((key) => (requestInfo[key] += item[key]));
+    });
+    stat.retryErrorsDays.forEach((item) => {
+      requestInfo.success += item.success;
+      requestInfo.validationErrors += item.validationErrors;
+      requestInfo.retryErrors -= item.success + item.validationErrors;
+    });
+
+    return requestInfo;
+  }
+
+  _writeReport(stat) {
+    const requestInfo = this._processStat(stat);
+    const report = `Общее количество ИНН: ${stat.totalRequestNumber}
+Выполнено запросов: ${requestInfo.requests}
+  успешных: ${requestInfo.success}
+  неудачных: ${requestInfo.validationErrors + requestInfo.retryErrors}
+    с ошибками в теле запроса (ИНН): ${requestInfo.validationErrors}
+    с сетевыми ошибками (будет повторный запрос): ${requestInfo.retryErrors}
+${
+  this._stopReason === 'Caused by previous StopError'
+    ? 'Внимание. Рекомендуется проверить лимиты на количество запросов в день, секунду и на количество новых соединений в минуту.'
+    : ''
+}
+Отчет сформирован: ${this._getDate(true)}`;
+
+    writeFileSync(this._mainReportPath, report);
+  }
+
+  _writeErrorsToRetry() {
+    if (existsSync(this._mainTempErrorsPath)) {
+      copyFileSync(this._mainTempErrorsPath, this._mainErrorsToRetryPath);
+      appendFileSync(
+        this._mainErrorsToRetryPath,
+        `Отчет сформирован: ${this._getDate(true)}`,
+        'utf8'
+      );
+    } else {
+      existsSync(this._mainErrorsToRetryPath) && unlinkSync(this._mainErrorsToRetryPath);
+    }
+  }
+
+  async _writeDateToValidationErrors() {
+    if (this._validationErrorStream) {
+      this._validationErrorStream.end(`Отчет сформирован: ${this._getDate(true)}\n\n`);
+      await new Promise((resolve) => this._errorStream.on('close', resolve));
+    }
+  }
+
+  async _generateReport() {
+    const stat = this._updateStat();
+    this._writeReport(stat);
+    this._writeErrorsToRetry();
+    await this._writeDateToValidationErrors();
+  }
+
   async start(checkingErrors = false) {
     try {
       await this._processInput(checkingErrors);
       const currentFiles = this._getCurrentFiles();
-      if (currentFiles.length) await this._requests(currentFiles);
-      else if (existsSync(this._mainTempErrorsPath)) await this.start(true);
+      if (currentFiles.length) {
+        await this._requests(currentFiles);
+        await this._generateReport();
+      } else if (existsSync(this._mainTempErrorsPath)) await this.start(true);
     } catch (err) {
-      this.logger.log(err);
+      this.logger.log('generalError', err);
       process.exit(1);
     }
   }
