@@ -49,6 +49,7 @@ class Manager {
     this._validationErrorStream = null;
     this._tempInputStream = null;
     this._successOutput = null;
+    this.withBranches = false;
     this.requestsPerDay = 18;
     this.innPerFile = 9;
     this.filesPerDay = Math.floor(this.requestsPerDay / this.innPerFile);
@@ -156,9 +157,9 @@ class Manager {
     });
 
     for await (const line of rl) {
-      if (queries[queries.length - 1].length === this.requestsLength)
-        queries.push([{ query: line, branch_type: 'MAIN' }]);
-      else queries[queries.length - 1].push({ query: line, branch_type: 'MAIN' });
+      const query = this.withBranches ? { query: line } : { query: line, branch_type: 'MAIN' };
+      if (queries[queries.length - 1].length === this.requestsLength) queries.push([query]);
+      else queries[queries.length - 1].push(query);
     }
 
     return queries;
@@ -220,7 +221,7 @@ class Manager {
       const requestFailure = response[1];
       const stop = response[2];
       const validationFailure = response[3];
-      this._successNumber += success.flat().length;
+      this._successNumber += success.length;
       this._retryErrorsNumber += requestFailure.length + stop.length;
       this._validationErrorsNumber += validationFailure.length;
       const failureRate = requestFailure.length / (success.length + requestFailure.length);
