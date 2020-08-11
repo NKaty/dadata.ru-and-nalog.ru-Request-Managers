@@ -112,40 +112,54 @@ class Manager {
   }
 
   async _processInput(checkingErrors) {
-    let currentPath;
-    if (!checkingErrors && existsSync(this._mainInputPath)) {
-      currentPath = this._mainInputPath;
+    let currentPaths;
+    let currentDir;
+    if (!checkingErrors) {
+      currentDir = this._inputPath;
+      currentPaths = readdirSync(currentDir).filter((file) => {
+        const stat = statSync(resolve(currentDir, file));
+        return stat.isFile() && file[0] !== '_';
+      });
+      if (!currentPaths.length) return;
       this._cleanBeforeStart();
-    } else if (checkingErrors && existsSync(this._mainTempErrorsPath)) {
-      currentPath = this._mainTempErrorsPath;
+    } else {
+      currentDir = this._tempErrorsPath;
+      currentPaths = readdirSync(currentDir);
+      if (!currentPaths.length) return;
       this._newCycle = true;
-    } else return;
+    }
 
     let lineCount = 0;
     let fileCount = 1;
 
     this._tempInputStream = createWriteStream(resolve(this._tempInputPath, `${fileCount}.txt`));
-    const rl = createInterface({
-      input: createReadStream(currentPath),
-      crlfDelay: Infinity,
-    });
 
-    for await (const line of rl) {
-      this._totalRequestNumber += 1;
-      if (lineCount === this.innPerFile) {
-        lineCount = 0;
-        this._tempInputStream.end();
-        fileCount += 1;
-        this._tempInputStream = createWriteStream(resolve(this._tempInputPath, `${fileCount}.txt`));
+    for (const file of currentPaths) {
+      const currentPath = resolve(currentDir, file);
+      const rl = createInterface({
+        input: createReadStream(currentPath),
+        crlfDelay: Infinity,
+      });
+
+      for await (const line of rl) {
+        this._totalRequestNumber += 1;
+        if (lineCount === this.innPerFile) {
+          lineCount = 0;
+          this._tempInputStream.end();
+          fileCount += 1;
+          this._tempInputStream = createWriteStream(
+            resolve(this._tempInputPath, `${fileCount}.txt`)
+          );
+        }
+        this._tempInputStream.write(`${line}\n`);
+        lineCount += 1;
       }
-      this._tempInputStream.write(`${line}\n`);
-      lineCount += 1;
+
+      if (checkingErrors) unlinkSync(currentPath);
+      else renameSync(currentPath, resolve(currentDir, `_${file}`));
     }
 
     this._tempInputStream.end();
-
-    if (currentPath === this._mainTempErrorsPath) unlinkSync(this._mainTempErrorsPath);
-    else renameSync(this._mainInputPath, resolve(this._inputPath, `_${this.mainInputFile}`));
   }
 
   async _getQueriesArray(currentPath) {
