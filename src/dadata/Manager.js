@@ -45,6 +45,10 @@ class Manager {
     this._mainStatPath = resolve(this._reportsPath, this.statFile);
     this._mainErrorsToRetryPath = resolve(this._reportsPath, this.errorsToRetryFile);
     this._mainValidationErrorsPath = resolve(this._reportsPath, this.validationErrorsFile);
+    this._tempErrorStream = null;
+    this._validationErrorStream = null;
+    this._tempInputStream = null;
+    this._successOutput = null;
     this.requestsPerDay = 18;
     this.innPerFile = 9;
     this.filesPerDay = Math.floor(this.requestsPerDay / this.innPerFile);
@@ -54,8 +58,6 @@ class Manager {
     this._stop = false;
     this._stopReason = '';
     this._firstJSON = true;
-    this._errorStream = null;
-    this._validationErrorStream = null;
     this._newCycle = false;
     this._totalRequestNumber = 0;
     this._currentRequestNumber = 0;
@@ -121,7 +123,7 @@ class Manager {
       let lineCount = 0;
       let fileCount = 1;
 
-      let output = createWriteStream(resolve(this._tempInputPath, `${fileCount}.txt`));
+      this._tempInputStream = createWriteStream(resolve(this._tempInputPath, `${fileCount}.txt`));
       const rl = createInterface({
         input: createReadStream(currentPath),
         crlfDelay: Infinity,
@@ -131,13 +133,17 @@ class Manager {
         this._totalRequestNumber += 1;
         if (lineCount === this.innPerFile) {
           lineCount = 0;
-          output.end();
+          this._tempInputStream.end();
           fileCount += 1;
-          output = createWriteStream(resolve(this._tempInputPath, `${fileCount}.txt`));
+          this._tempInputStream = createWriteStream(
+            resolve(this._tempInputPath, `${fileCount}.txt`)
+          );
         }
-        output.write(`${line}\n`);
+        this._tempInputStream.write(`${line}\n`);
         lineCount += 1;
       }
+
+      this._tempInputStream.end();
 
       if (currentPath === this._mainTempErrorsPath) unlinkSync(this._mainTempErrorsPath);
       else renameSync(this._mainInputPath, resolve(this._inputPath, `_${this.mainInputFile}`));
@@ -185,31 +191,31 @@ class Manager {
     });
   }
 
-  _processResponse(response, output) {
+  _processResponse(response) {
     const json = this._getJson(response);
     if (this._firstJSON) {
-      output.write(`\n${json}`);
+      this._successOutput.write(`\n${json}`);
       this._firstJSON = false;
     } else {
-      output.write(`,\n${json}`);
+      this._successOutput.write(`,\n${json}`);
     }
   }
 
   async _request(currentPath) {
     this._firstJSON = true;
     const queriesArray = await this._getQueriesArray(currentPath);
-    const successOutput = createWriteStream(resolve(this._outputPath, `${this._getDate()}.json`));
+    this._successOutput = createWriteStream(resolve(this._outputPath, `${this._getDate()}.json`));
 
-    successOutput.write('[');
+    this._successOutput.write('[');
 
     for (const arr of queriesArray) {
       if (arr.length && this._stop) {
         this._retryErrorsNumber += arr.length;
         this._currentRequestNumber += arr.length;
-        if (!this._errorStream)
-          this._errorStream = createWriteStream(this._mainTempErrorsPath, { flags: 'a' });
+        if (!this._tempErrorStream)
+          this._tempErrorStream = createWriteStream(this._mainTempErrorsPath, { flags: 'a' });
         arr.forEach((item) => {
-          this._errorStream.write(`${item.query}\n`);
+          this._tempErrorStream.write(`${item.query}\n`);
           this.logger.log('retryError', this._stopReason, item.query);
         });
         continue;
@@ -225,12 +231,12 @@ class Manager {
       this._validationErrorsNumber += validationFailure.length;
       const failureRate = requestFailure.length / (success.length + requestFailure.length);
 
-      success.flat().forEach((item) => this._processResponse(item, successOutput));
+      success.flat().forEach((item) => this._processResponse(item));
 
-      if ((requestFailure.length || stop.length) && !this._errorStream)
-        this._errorStream = createWriteStream(this._mainTempErrorsPath, { flags: 'a' });
-      requestFailure.forEach((item) => this._errorStream.write(`${item}\n`));
-      stop.forEach((item) => this._errorStream.write(`${item}\n`));
+      if ((requestFailure.length || stop.length) && !this._tempErrorStream)
+        this._tempErrorStream = createWriteStream(this._mainTempErrorsPath, { flags: 'a' });
+      requestFailure.forEach((item) => this._tempErrorStream.write(`${item}\n`));
+      stop.forEach((item) => this._tempErrorStream.write(`${item}\n`));
 
       if (validationFailure.length && !this._validationErrorStream)
         this._validationErrorStream = createWriteStream(this._mainValidationErrorsPath, {
@@ -251,21 +257,21 @@ class Manager {
       }
     }
 
-    successOutput.end('\n]\n');
+    this._successOutput.end('\n]\n');
 
     existsSync(currentPath) && unlinkSync(currentPath);
   }
 
   async _requests(currentFiles) {
     for (const file of currentFiles) {
-      if (this._stop) {
-        if (this._errorStream) this._errorStream.end();
-        await new Promise((resolve) => this._errorStream.on('close', resolve));
-        return;
-      }
+      if (this._stop) break;
       await this._request(resolve(this._tempInputPath, file));
     }
-    if (this._errorStream) this._errorStream.end();
+
+    if (this._tempErrorStream) {
+      this._tempErrorStream.end();
+      await new Promise((resolve) => this._tempErrorStream.on('close', resolve));
+    }
   }
 
   _getCurrentFiles() {
@@ -356,7 +362,7 @@ ${
   async _writeDateToValidationErrors() {
     if (this._validationErrorStream) {
       this._validationErrorStream.end(`Отчет сформирован: ${this._getDate(true)}\n\n`);
-      await new Promise((resolve) => this._errorStream.on('close', resolve));
+      await new Promise((resolve) => this._validationErrorStream.on('close', resolve));
     }
   }
 
@@ -367,6 +373,26 @@ ${
     await this._writeDateToValidationErrors();
   }
 
+  async _cleanBeforeFinish() {
+    const streams = [
+      this._tempInputStream,
+      this._successOutput,
+      this._tempErrorStream,
+      this._validationErrorStream,
+    ];
+
+    const streamPromises = streams.map((stream) => {
+      if (stream) {
+        stream.end();
+        return new Promise((resolve) => stream.on('close', resolve));
+      }
+      return new Promise((resolve) => resolve());
+    });
+
+    await Promise.allSettled(streamPromises);
+    await this.logger.closeStreams();
+  }
+
   async start(checkingErrors = false) {
     try {
       await this._processInput(checkingErrors);
@@ -374,10 +400,12 @@ ${
       if (currentFiles.length) {
         await this._requests(currentFiles);
         await this._generateReport();
+        await this._cleanBeforeFinish();
       } else if (existsSync(this._mainTempErrorsPath)) await this.start(true);
     } catch (err) {
       this.logger.log('generalError', err);
-      process.exit(1);
+      await this._generateReport();
+      await this._cleanBeforeFinish();
     }
   }
 }

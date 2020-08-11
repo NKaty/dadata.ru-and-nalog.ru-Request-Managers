@@ -35,6 +35,17 @@ class Logger {
     if (message instanceof Error) console.log(`${info}${message.stack}`);
     stream && stream.write(`${info}${message}\n`);
   }
+
+  async closeStreams() {
+    const streamPromises = Object.keys(this._steamTypes).map((stream) => {
+      if (this._steamTypes[stream]) {
+        this._steamTypes[stream].end();
+        return new Promise((resolve) => this._steamTypes[stream].on('close', resolve));
+      }
+      return new Promise((resolve) => resolve());
+    });
+    await Promise.allSettled(streamPromises);
+  }
 }
 
 module.exports = Logger;
