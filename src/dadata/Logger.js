@@ -33,7 +33,8 @@ class Logger {
     const info = args.length ? `${args.join(', ')} ` : '';
     const stream = this._getStream(type);
     if (message instanceof Error) console.log(`${info}${message.stack}`);
-    stream && stream.write(`${info}${message}\n`);
+    if (type === 'generalError' && stream) stream.write(`${info}${message.stack}\n`);
+    else stream && stream.write(`${info}${message}\n`);
   }
 
   async closeStreams() {
