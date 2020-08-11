@@ -10,6 +10,7 @@ class APICaller {
     this.token = options.token || process.env.DADATA_API_KEY;
     this.httpsAgent = options.httpsAgent || null;
     this.logger = options.logger || console;
+    this.isSuccessLogging = options.isSuccessLogging || false;
     this.requestOptions = {
       method: 'POST',
       // mode: 'cors',
@@ -53,10 +54,10 @@ class APICaller {
       if (json.suggestions && json.suggestions.length === 0)
         throw new ValidationError('Invalid inn.');
 
-      if (json.suggestions && json.suggestions[0].data)
-        this.logger.log('success', `${json.suggestions[0].data.inn} Data is received.`);
-
-      if (Math.random() > 0.9) throw new RequestError(requestBody.query);
+      if (this.isSuccessLogging) {
+        if (json.suggestions && json.suggestions[0].data)
+          this.logger.log('success', `${json.suggestions[0].data.inn} Data is received.`);
+      }
 
       return json.suggestions;
     } catch (err) {

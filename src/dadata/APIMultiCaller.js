@@ -19,6 +19,7 @@ class APIMultiCaller {
     this.apiCaller = new APICaller({
       httpsAgent: this.httpsAgent,
       logger: this.logger,
+      isSuccessLogging: options.isSuccessLogging || false,
       token: options.token,
     });
   }

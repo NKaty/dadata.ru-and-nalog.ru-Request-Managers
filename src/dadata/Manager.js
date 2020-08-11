@@ -5,6 +5,7 @@ const {
   existsSync,
   renameSync,
   mkdirSync,
+  rmdirSync,
   readdirSync,
   unlinkSync,
   readFileSync,
@@ -26,7 +27,6 @@ class Manager {
     this.outputDir = '../../output';
     this.logsDir = '../../logs';
     this.reportsDir = '../../reports';
-    this.mainInputFile = 'input.txt';
     this.tempErrorsFile = 'errors.txt';
     this.reportFile = 'report.txt';
     this.statFile = 'stat.json';
@@ -37,7 +37,6 @@ class Manager {
     this._tempErrorsPath = resolve(this._tempPath, this.tempErrorsDir);
     this._mainTempErrorsPath = resolve(this._tempErrorsPath, this.tempErrorsFile);
     this._inputPath = resolve(__dirname, this.inputDir);
-    this._mainInputPath = resolve(this._inputPath, this.mainInputFile);
     this._outputPath = resolve(__dirname, this.outputDir);
     this._logsPath = resolve(__dirname, this.logsDir);
     this._reportsPath = resolve(__dirname, this.reportsDir);
@@ -53,12 +52,12 @@ class Manager {
     this.requestsPerDay = 18;
     this.innPerFile = 9;
     this.filesPerDay = Math.floor(this.requestsPerDay / this.innPerFile);
-    this.requestsLength = 2;
+    this.requestsLength = 3;
     this.failureRate = 0.5;
     this.requestsLengthToCheckFailureRate = 2;
     this._repeatedFailure = false;
     this._stop = false;
-    this._stopReason = '';
+    this._isStopErrorOccurred = false;
     this._firstJSON = true;
     this._newCycle = false;
     this._totalRequestNumber = 0;
@@ -93,22 +92,23 @@ class Manager {
     return now.substr(0, 23);
   }
 
+  _cleanDir(dir) {
+    const items = readdirSync(dir);
+    items.forEach((item) => {
+      const path = resolve(dir, item);
+      const stat = statSync(path);
+      if (stat.isFile()) unlinkSync(path);
+      else rmdirSync(path);
+    });
+  }
+
   _cleanBeforeStart() {
     if (existsSync(this._mainStatPath)) unlinkSync(this._mainStatPath);
     if (existsSync(this._mainValidationErrorsPath)) unlinkSync(this._mainValidationErrorsPath);
     if (existsSync(this._mainTempErrorsPath)) unlinkSync(this._mainTempErrorsPath);
 
-    const logs = readdirSync(this._logsPath);
-    logs.forEach((file) => {
-      const stat = statSync(resolve(this._logsPath, file));
-      stat.isFile() && unlinkSync(resolve(this._logsPath, file));
-    });
-
-    const tempInputs = readdirSync(this._tempInputPath);
-    tempInputs.forEach((file) => {
-      const stat = statSync(resolve(this._tempInputPath, file));
-      stat.isFile() && unlinkSync(resolve(this._tempInputPath, file));
-    });
+    this._cleanDir(this._logsPath);
+    this._cleanDir(this._tempInputPath);
   }
 
   async _processInput(checkingErrors) {
@@ -212,56 +212,55 @@ class Manager {
   async _request(currentPath) {
     this._firstJSON = true;
     const queriesArray = await this._getQueriesArray(currentPath);
-    this._successOutput = createWriteStream(resolve(this._outputPath, `${this._getDate()}.json`));
+    const outputFileName = `${this._getDate()}.json`;
+    this._successOutput = createWriteStream(resolve(this._outputPath, outputFileName));
+    const successInn = [];
+    let requestFailure = [];
+    let validationFailure = [];
+    let currentRequestNumber = 0;
+    let successNumber = 0;
+    let retryErrorsNumber = 0;
+    let validationErrorsNumber = 0;
 
     this._successOutput.write('[');
 
     for (const arr of queriesArray) {
-      if (arr.length && this._stop) {
-        this._retryErrorsNumber += arr.length;
-        this._currentRequestNumber += arr.length;
-        if (!this._tempErrorStream)
-          this._tempErrorStream = createWriteStream(this._mainTempErrorsPath, { flags: 'a' });
-        arr.forEach((item) => {
-          this._tempErrorStream.write(`${item.query}\n`);
-          this.logger.log('retryError', this._stopReason, item.query);
-        });
-        continue;
+      const response = await this.apiMultiCaller.makeRequests(arr);
+      const success = response[0];
+      const stopErrors = response[2];
+      requestFailure = [...requestFailure, ...response[1]];
+      validationFailure = [...validationFailure, ...response[3]];
+      const failureRate = response[1].length / (success.length + response[1].length);
+      const failureRateExceeded =
+        failureRate > this.failureRate && arr.length > this.requestsLengthToCheckFailureRate;
+
+      if (stopErrors.length || (failureRate > this.failureRate && this._repeatedFailure)) {
+        this._stop = true;
+        this._isStopErrorOccurred = !!stopErrors.length;
+        if (this._successOutput) {
+          this._successOutput.end();
+          await new Promise((resolve) => this._successOutput.on('close', resolve));
+          existsSync(resolve(this._outputPath, outputFileName)) &&
+            unlinkSync(resolve(this._outputPath, outputFileName));
+          const errorMessage = stopErrors.length
+            ? `Due to StopError the script was stopped, ${outputFileName} was removed.`
+            : `The maximum failure rate was exceeded. The script was stopped. ${outputFileName} was removed.`;
+          this.logger.log('retryError', errorMessage);
+        }
+        return;
       }
 
-      const response = await this.apiMultiCaller.makeRequests(arr);
-      this._currentRequestNumber += arr.length;
-      const success = response[0];
-      const requestFailure = response[1];
-      const stop = response[2];
-      const validationFailure = response[3];
-      this._successNumber += success.length;
-      this._retryErrorsNumber += requestFailure.length + stop.length;
-      this._validationErrorsNumber += validationFailure.length;
-      const failureRate = requestFailure.length / (success.length + requestFailure.length);
-      const failureRateExceeded =
-        failureRate > this.failureRate &&
-        response.flat().length > this.requestsLengthToCheckFailureRate;
+      currentRequestNumber += arr.length;
+      successNumber += success.length;
+      retryErrorsNumber += response[1].length;
+      validationErrorsNumber += response[3].length;
 
-      success.flat().forEach((item) => this._processResponse(item));
+      success.flat().forEach((item) => {
+        successInn.push(item.data.inn);
+        this._processResponse(item);
+      });
 
-      if ((requestFailure.length || stop.length) && !this._tempErrorStream)
-        this._tempErrorStream = createWriteStream(this._mainTempErrorsPath, { flags: 'a' });
-      requestFailure.forEach((item) => this._tempErrorStream.write(`${item}\n`));
-      stop.forEach((item) => this._tempErrorStream.write(`${item}\n`));
-
-      if (validationFailure.length && !this._validationErrorStream)
-        this._validationErrorStream = createWriteStream(this._mainValidationErrorsPath, {
-          flags: 'a',
-        });
-      validationFailure.forEach((item) => this._validationErrorStream.write(`${item}\n`));
-
-      if (stop.length || (failureRate > this.failureRate && this._repeatedFailure)) {
-        this._stop = true;
-        this._stopReason = stop.length
-          ? 'Caused by previous StopError'
-          : 'Failure limit rate was exceeded.';
-      } else if (failureRateExceeded && !this._repeatedFailure) {
+      if (failureRateExceeded && !this._repeatedFailure) {
         this._repeatedFailure = true;
         await new Promise((resolve) => setTimeout(resolve, 0.2 * 60 * 1000));
       } else {
@@ -270,6 +269,24 @@ class Manager {
     }
 
     this._successOutput.end('\n]\n');
+
+    this._currentRequestNumber += currentRequestNumber;
+    this._successNumber += successNumber;
+    this._retryErrorsNumber += retryErrorsNumber;
+    this._validationErrorsNumber += validationErrorsNumber;
+
+    if (successInn.length)
+      successInn.forEach((inn) => this.logger.log('success', `${inn} Data is received.`));
+
+    if (requestFailure.length && !this._tempErrorStream)
+      this._tempErrorStream = createWriteStream(this._mainTempErrorsPath, { flags: 'a' });
+    requestFailure.forEach((item) => this._tempErrorStream.write(`${item}\n`));
+
+    if (validationFailure.length && !this._validationErrorStream)
+      this._validationErrorStream = createWriteStream(this._mainValidationErrorsPath, {
+        flags: 'a',
+      });
+    validationFailure.forEach((item) => this._validationErrorStream.write(`${item}\n`));
 
     existsSync(currentPath) && unlinkSync(currentPath);
   }
@@ -349,7 +366,7 @@ class Manager {
     с ошибками в теле запроса (ИНН): ${requestInfo.validationErrors}
     с сетевыми ошибками (будет повторный запрос): ${requestInfo.retryErrors}
 ${
-  this._stopReason === 'Caused by previous StopError'
+  this._isStopErrorOccurred
     ? 'Внимание. Рекомендуется проверить лимиты на количество запросов в день, секунду и на количество новых соединений в минуту.'
     : ''
 }
