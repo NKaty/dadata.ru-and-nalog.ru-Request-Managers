@@ -52,8 +52,9 @@ class Manager {
     this.requestsPerDay = 18;
     this.innPerFile = 9;
     this.filesPerDay = Math.floor(this.requestsPerDay / this.innPerFile);
-    this.requestsLength = 3;
+    this.requestsLength = 2;
     this.failureRate = 0.5;
+    this.requestsLengthToCheckFailureRate = 2;
     this._repeatedFailure = false;
     this._stop = false;
     this._stopReason = '';
@@ -110,51 +111,43 @@ class Manager {
   }
 
   async _processInput(checkingErrors) {
-    try {
-      let currentPath;
-      if (!checkingErrors && existsSync(this._mainInputPath)) {
-        currentPath = this._mainInputPath;
-        this._cleanBeforeStart();
-      } else if (checkingErrors && existsSync(this._mainTempErrorsPath)) {
-        currentPath = this._mainTempErrorsPath;
-        this._newCycle = true;
-      } else return;
+    let currentPath;
+    if (!checkingErrors && existsSync(this._mainInputPath)) {
+      currentPath = this._mainInputPath;
+      this._cleanBeforeStart();
+    } else if (checkingErrors && existsSync(this._mainTempErrorsPath)) {
+      currentPath = this._mainTempErrorsPath;
+      this._newCycle = true;
+    } else return;
 
-      let lineCount = 0;
-      let fileCount = 1;
+    let lineCount = 0;
+    let fileCount = 1;
 
-      this._tempInputStream = createWriteStream(resolve(this._tempInputPath, `${fileCount}.txt`));
-      const rl = createInterface({
-        input: createReadStream(currentPath),
-        crlfDelay: Infinity,
-      });
+    this._tempInputStream = createWriteStream(resolve(this._tempInputPath, `${fileCount}.txt`));
+    const rl = createInterface({
+      input: createReadStream(currentPath),
+      crlfDelay: Infinity,
+    });
 
-      for await (const line of rl) {
-        this._totalRequestNumber += 1;
-        if (lineCount === this.innPerFile) {
-          lineCount = 0;
-          this._tempInputStream.end();
-          fileCount += 1;
-          this._tempInputStream = createWriteStream(
-            resolve(this._tempInputPath, `${fileCount}.txt`)
-          );
-        }
-        this._tempInputStream.write(`${line}\n`);
-        lineCount += 1;
+    for await (const line of rl) {
+      this._totalRequestNumber += 1;
+      if (lineCount === this.innPerFile) {
+        lineCount = 0;
+        this._tempInputStream.end();
+        fileCount += 1;
+        this._tempInputStream = createWriteStream(resolve(this._tempInputPath, `${fileCount}.txt`));
       }
-
-      this._tempInputStream.end();
-
-      if (currentPath === this._mainTempErrorsPath) unlinkSync(this._mainTempErrorsPath);
-      else renameSync(this._mainInputPath, resolve(this._inputPath, `_${this.mainInputFile}`));
-    } catch (err) {
-      this.logger.log('generalError', err);
-      process.exit(1);
+      this._tempInputStream.write(`${line}\n`);
+      lineCount += 1;
     }
+
+    this._tempInputStream.end();
+
+    if (currentPath === this._mainTempErrorsPath) unlinkSync(this._mainTempErrorsPath);
+    else renameSync(this._mainInputPath, resolve(this._inputPath, `_${this.mainInputFile}`));
   }
 
   async _getQueriesArray(currentPath) {
-    console.log(currentPath);
     const queries = [[]];
 
     const rl = createInterface({
@@ -220,6 +213,7 @@ class Manager {
         });
         continue;
       }
+
       const response = await this.apiMultiCaller.makeRequests(arr);
       this._currentRequestNumber += arr.length;
       const success = response[0];
@@ -230,6 +224,9 @@ class Manager {
       this._retryErrorsNumber += requestFailure.length + stop.length;
       this._validationErrorsNumber += validationFailure.length;
       const failureRate = requestFailure.length / (success.length + requestFailure.length);
+      const failureRateExceeded =
+        failureRate > this.failureRate &&
+        response.flat().length > this.requestsLengthToCheckFailureRate;
 
       success.flat().forEach((item) => this._processResponse(item));
 
@@ -244,12 +241,12 @@ class Manager {
         });
       validationFailure.forEach((item) => this._validationErrorStream.write(`${item}\n`));
 
-      if (stop.length || (failureRate >= this.failureRate && this._repeatedFailure)) {
+      if (stop.length || (failureRate > this.failureRate && this._repeatedFailure)) {
         this._stop = true;
         this._stopReason = stop.length
           ? 'Caused by previous StopError'
           : 'Failure limit rate was exceeded.';
-      } else if (failureRate >= this.failureRate && !this._repeatedFailure) {
+      } else if (failureRateExceeded && !this._repeatedFailure) {
         this._repeatedFailure = true;
         await new Promise((resolve) => setTimeout(resolve, 0.2 * 60 * 1000));
       } else {
