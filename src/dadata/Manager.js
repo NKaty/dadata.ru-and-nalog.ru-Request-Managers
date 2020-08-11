@@ -396,10 +396,14 @@ ${
   }
 
   async _generateReport() {
-    const stat = this._updateStat();
-    this._writeReport(stat);
-    this._writeErrorsToRetry();
-    await this._writeDateToValidationErrors();
+    try {
+      const stat = this._updateStat();
+      this._writeReport(stat);
+      this._writeErrorsToRetry();
+      await this._writeDateToValidationErrors();
+    } catch (err) {
+      this.logger.log('generalError', err);
+    }
   }
 
   async _cleanBeforeFinish() {
@@ -410,16 +414,20 @@ ${
       this._validationErrorStream,
     ];
 
-    const streamPromises = streams.map((stream) => {
-      if (stream) {
-        stream.end();
-        return new Promise((resolve) => stream.on('close', resolve));
-      }
-      return new Promise((resolve) => resolve());
-    });
+    try {
+      const streamPromises = streams.map((stream) => {
+        if (stream) {
+          stream.end();
+          return new Promise((resolve) => stream.on('close', resolve));
+        }
+        return new Promise((resolve) => resolve());
+      });
 
-    await Promise.allSettled(streamPromises);
-    await this.logger.closeStreams();
+      await Promise.allSettled(streamPromises);
+      await this.logger.closeStreams();
+    } catch (err) {
+      console.log(err);
+    }
   }
 
   async start(checkingErrors = false) {

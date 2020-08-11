@@ -30,22 +30,30 @@ class Logger {
   }
 
   log(type, message, ...args) {
-    const info = args.length ? `${args.join(', ')} ` : '';
-    const stream = this._getStream(type);
-    if (message instanceof Error) console.log(`${info}${message.stack}`);
-    if (type === 'generalError' && stream) stream.write(`${info}${message.stack}\n`);
-    else stream && stream.write(`${info}${message}\n`);
+    try {
+      const info = args.length ? `${args.join(', ')} ` : '';
+      const stream = this._getStream(type);
+      if (message instanceof Error) console.log(`${info}${message.stack}`);
+      if (type === 'generalError' && stream) stream.write(`${info}${message.stack}\n`);
+      else stream && stream.write(`${info}${message}\n`);
+    } catch (err) {
+      console.log(err);
+    }
   }
 
   async closeStreams() {
-    const streamPromises = Object.keys(this._steamTypes).map((stream) => {
-      if (this._steamTypes[stream]) {
-        this._steamTypes[stream].end();
-        return new Promise((resolve) => this._steamTypes[stream].on('close', resolve));
-      }
-      return new Promise((resolve) => resolve());
-    });
-    await Promise.allSettled(streamPromises);
+    try {
+      const streamPromises = Object.keys(this._steamTypes).map((stream) => {
+        if (this._steamTypes[stream]) {
+          this._steamTypes[stream].end();
+          return new Promise((resolve) => this._steamTypes[stream].on('close', resolve));
+        }
+        return new Promise((resolve) => resolve());
+      });
+      await Promise.allSettled(streamPromises);
+    } catch (err) {
+      console.log(err);
+    }
   }
 }
 
