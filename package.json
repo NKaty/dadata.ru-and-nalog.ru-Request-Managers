@@ -19,6 +19,7 @@
     "prettier": "^2.0.5"
   },
   "dependencies": {
+    "better-sqlite3": "^7.1.0",
     "dotenv": "^8.2.0",
     "node-fetch": "^2.6.0",
     "pdfreader": "^1.0.7",
