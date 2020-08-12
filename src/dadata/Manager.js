@@ -19,27 +19,28 @@ const APIMultiCaller = require('./APIMultiCaller');
 const Logger = require('./Logger');
 
 class Manager {
-  constructor() {
-    this.tempDir = '../../temp';
+  constructor(workingDir = process.cwd()) {
+    this.tempDir = 'temp';
     this.tempInputDir = 'input';
     this.tempErrorsDir = 'errors';
-    this.inputDir = '../../input';
-    this.outputDir = '../../output';
-    this.logsDir = '../../logs';
-    this.reportsDir = '../../reports';
+    this.inputDir = 'input';
+    this.outputDir = 'output';
+    this.logsDir = 'logs';
+    this.reportsDir = 'reports';
     this.tempErrorsFile = 'errors.txt';
     this.reportFile = 'report.txt';
     this.statFile = 'stat.json';
     this.errorsToRetryFile = 'errorsToRetry.txt';
     this.validationErrorsFile = 'validationErrors.txt';
-    this._tempPath = resolve(__dirname, this.tempDir);
+    this._workingDir = workingDir;
+    this._tempPath = resolve(this._workingDir, this.tempDir);
     this._tempInputPath = resolve(this._tempPath, this.tempInputDir);
     this._tempErrorsPath = resolve(this._tempPath, this.tempErrorsDir);
     this._mainTempErrorsPath = resolve(this._tempErrorsPath, this.tempErrorsFile);
-    this._inputPath = resolve(__dirname, this.inputDir);
-    this._outputPath = resolve(__dirname, this.outputDir);
-    this._logsPath = resolve(__dirname, this.logsDir);
-    this._reportsPath = resolve(__dirname, this.reportsDir);
+    this._inputPath = resolve(this._workingDir, this.inputDir);
+    this._outputPath = resolve(this._workingDir, this.outputDir);
+    this._logsPath = resolve(this._workingDir, this.logsDir);
+    this._reportsPath = resolve(this._workingDir, this.reportsDir);
     this._mainReportPath = resolve(this._reportsPath, this.reportFile);
     this._mainStatPath = resolve(this._reportsPath, this.statFile);
     this._mainErrorsToRetryPath = resolve(this._reportsPath, this.errorsToRetryFile);
@@ -49,12 +50,13 @@ class Manager {
     this._tempInputStream = null;
     this._successOutput = null;
     this.withBranches = false;
-    this.requestsPerDay = 18;
-    this.innPerFile = 9;
+    this.requestsPerDay = 8000;
+    this.innPerFile = 500;
     this.filesPerDay = Math.floor(this.requestsPerDay / this.innPerFile);
-    this.requestsLength = 3;
+    this.requestsLength = 100;
     this.failureRate = 0.5;
-    this.requestsLengthToCheckFailureRate = 2;
+    this.requestsLengthToCheckFailureRate = 5;
+    this.timeToWaitBeforeNextAttempt = 30 * 60 * 1000;
     this._repeatedFailure = false;
     this._stop = false;
     this._isStopErrorOccurred = false;
@@ -137,7 +139,7 @@ class Manager {
     for (const file of currentPaths) {
       const currentPath = resolve(currentDir, file);
       const rl = createInterface({
-        input: createReadStream(currentPath),
+        input: createReadStream(currentPath, 'utf8'),
         crlfDelay: Infinity,
       });
 
@@ -166,7 +168,7 @@ class Manager {
     const queries = [[]];
 
     const rl = createInterface({
-      input: createReadStream(currentPath),
+      input: createReadStream(currentPath, 'utf8'),
       crlfDelay: Infinity,
     });
 
@@ -262,7 +264,7 @@ class Manager {
 
       if (failureRateExceeded && !this._repeatedFailure) {
         this._repeatedFailure = true;
-        await new Promise((resolve) => setTimeout(resolve, 0.2 * 60 * 1000));
+        await new Promise((resolve) => setTimeout(resolve, this.timeToWaitBeforeNextAttempt));
       } else {
         this._repeatedFailure = false;
       }
@@ -378,11 +380,7 @@ ${
   _writeErrorsToRetry() {
     if (existsSync(this._mainTempErrorsPath)) {
       copyFileSync(this._mainTempErrorsPath, this._mainErrorsToRetryPath);
-      appendFileSync(
-        this._mainErrorsToRetryPath,
-        `Отчет сформирован: ${this._getDate(true)}`,
-        'utf8'
-      );
+      appendFileSync(this._mainErrorsToRetryPath, `Отчет сформирован: ${this._getDate(true)}`);
     } else {
       existsSync(this._mainErrorsToRetryPath) && unlinkSync(this._mainErrorsToRetryPath);
     }

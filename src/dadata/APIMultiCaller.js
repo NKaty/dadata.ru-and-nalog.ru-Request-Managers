@@ -9,10 +9,10 @@ class APIMultiCaller {
       options.httpsAgent ||
       new Agent({
         keepAlive: true,
-        maxSockets: options.sockets || 60,
+        maxSockets: options.sockets || 30,
       });
     this.throttle = new PromiseThrottle({
-      requestsPerSecond: options.requestsPerSecond || 20,
+      requestsPerSecond: options.requestsPerSecond || 17,
       promiseImplementation: Promise,
     });
     this.logger = options.logger || console;

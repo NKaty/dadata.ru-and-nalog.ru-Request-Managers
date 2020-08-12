@@ -13,7 +13,6 @@ class APICaller {
     this.isSuccessLogging = options.isSuccessLogging || false;
     this.requestOptions = {
       method: 'POST',
-      // mode: 'cors',
       agent: this.httpsAgent,
       headers: {
         'Content-Type': 'application/json',
