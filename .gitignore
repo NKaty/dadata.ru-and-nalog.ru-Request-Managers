@@ -4,5 +4,6 @@
 /logs
 /input
 /output
-/config
+/temp
+/reports
 .env
