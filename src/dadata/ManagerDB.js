@@ -25,6 +25,7 @@ class ManagerDB {
     this.reportFile = 'report.txt';
     this.errorsToRetryFile = 'errorsToRetry.txt';
     this.validationErrorsFile = 'validationErrors.txt';
+    this.dbFile = 'dadata.db';
     this._workingDir = workingDir;
     this._inputPath = resolve(this._workingDir, this.inputDir);
     this._outputPath = resolve(this._workingDir, this.outputDir);
@@ -36,24 +37,27 @@ class ManagerDB {
     this._validationErrorStream = null;
     this._retryErrorStream = null;
     this._successOutput = null;
-    this.withBranches = false;
+    this.withBranches = true;
+    this.branchesCount = 20;
+    this.cleanDB = false;
+    this.updateMode = true;
     this.requestsPerDay = 24;
     this.innPerFile = 9;
-    this.requestsLength = 8;
-    // this.failureRate = 0.5;
-    // this.requestsLengthToCheckFailureRate = 5;
-    // this.timeToWaitBeforeNextAttempt = 30 * 60 * 1000;
-    // this._repeatedFailure = false;
+    this.requestsLength = 6;
+    this.failureRate = 0.5;
+    this.requestsLengthToCheckFailureRate = 5;
+    this.timeToWaitBeforeNextAttempt = 0.2 * 60 * 1000;
+    this._repeatedFailure = false;
     this._stop = false;
     this._isStopErrorOccurred = false;
-    this.db = new Database('dadata.db', { verbose: console.log });
+    this.db = new Database(this.dbFile, { verbose: console.log });
     this.logger = new Logger(
       resolve(this._logsPath, `retryErrors_${this._getDate()}.log`),
       resolve(this._logsPath, `validationErrors_${this._getDate()}.log`),
       resolve(this._logsPath, `generalErrors_${this._getDate()}.log`),
       resolve(this._logsPath, `success_${this._getDate()}.log`)
     );
-    this.apiMultiCaller = new APIMultiCaller({ logger: this.logger });
+    this.apiMultiCaller = new APIMultiCaller({ logger: this.logger, isSuccessLogging: true });
     this._createDirStructure();
   }
 
@@ -81,6 +85,7 @@ class ManagerDB {
              json TEXT)`
       )
       .run();
+    if (this.cleanDB) this.db.prepare('DELETE FROM jsons').run();
   }
 
   _getDate(pretty = false) {
@@ -110,11 +115,12 @@ class ManagerDB {
       const stat = statSync(resolve(this._inputPath, file));
       return stat.isFile() && file[0] !== '_';
     });
+
     if (!inputPaths.length) return;
+
     this._prepareDB();
     this._cleanBeforeStart();
 
-    const stmt = this.db.prepare('INSERT INTO requests (inn, status) VALUES (?, ?)');
     for (const file of inputPaths) {
       const currentPath = resolve(this._inputPath, file);
       const rl = createInterface({
@@ -123,17 +129,24 @@ class ManagerDB {
       });
 
       for await (const line of rl) {
-        stmt.run(line, 'raw');
+        let status = 'raw';
+        if (
+          !this.updateMode &&
+          this.db.prepare('SELECT inn FROM jsons WHERE inn = ?').get(line) !== undefined
+        )
+          status = 'success';
+        this.db.prepare('INSERT INTO requests (inn, status) VALUES (?, ?)').run(line, status);
       }
 
       renameSync(currentPath, resolve(this._inputPath, `_${file}`));
     }
   }
 
-  _updateAfterRequest(success, validationFailure, requestFailure) {
+  _updateAfterRequest(success, validationErrors, requestErrors, stopErrors) {
     const updateStatus = this.db.prepare('UPDATE requests SET status = ? WHERE inn = ?');
-    success.flat().forEach((item) => {
-      const inn = item.data.inn;
+
+    success.forEach((item) => {
+      const inn = item[0].data.inn;
       if (this.db.prepare('SELECT inn FROM jsons WHERE inn = ?').get(inn) === undefined) {
         this.db
           .prepare('INSERT INTO jsons (inn, json) VALUES (?, ?)')
@@ -144,21 +157,32 @@ class ManagerDB {
       updateStatus.run('success', inn);
     });
 
-    validationFailure.forEach((item) => updateStatus.run('invalid', item));
-    requestFailure.forEach((item) => updateStatus.run('retry', item));
+    validationErrors.forEach((item) => updateStatus.run('invalid', item));
+    requestErrors.forEach((item) => updateStatus.run('retry', item));
+    stopErrors.forEach((item) => updateStatus.run('retry', item));
   }
 
   async _request(queries) {
     const response = await this.apiMultiCaller.makeRequests(queries);
     const success = response[0];
-    const requestFailure = response[1];
-    // const stopErrors = response[2];
-    const validationFailure = response[3];
-    // const failureRate = response[1].length / (success.length + response[1].length);
-    // const failureRateExceeded =
-    //   failureRate > this.failureRate && queries.length > this.requestsLengthToCheckFailureRate;
+    const requestErrors = response[1];
+    const stopErrors = response[2];
+    const validationErrors = response[3];
+    const failureRate = requestErrors.length / (success.length + requestErrors.length);
+    const failureRateExceeded =
+      failureRate > this.failureRate && queries.length > this.requestsLengthToCheckFailureRate;
 
-    this._updateAfterRequest(success, validationFailure, requestFailure);
+    this._updateAfterRequest(success, validationErrors, requestErrors, stopErrors);
+
+    if (stopErrors.length || (failureRate > this.failureRate && this._repeatedFailure)) {
+      this._stop = true;
+      this._isStopErrorOccurred = !!stopErrors.length;
+    } else if (failureRateExceeded && !this._repeatedFailure) {
+      this._repeatedFailure = true;
+      await new Promise((resolve) => setTimeout(resolve, this.timeToWaitBeforeNextAttempt));
+    } else {
+      this._repeatedFailure = false;
+    }
   }
 
   async _requests() {
@@ -169,17 +193,22 @@ class ManagerDB {
       .all();
 
     while (queryArray.length) {
+      if (this._stop) return;
       const queries = queryArray
         .splice(0, this.requestsLength)
         .flat()
-        .map((inn) => (this.withBranches ? { query: inn } : { query: inn, branch_type: 'MAIN' }));
+        .map((inn) =>
+          this.withBranches
+            ? { query: inn, count: this.branchesCount }
+            : { query: inn, branch_type: 'MAIN' }
+        );
       await this._request(queries);
     }
     console.log(this.db.prepare('SELECT inn, status FROM requests').all());
   }
 
-  _getJson(json) {
-    const data = JSON.parse(json).data;
+  _getDataJson(item) {
+    const data = item.data;
     return JSON.stringify({
       full_name: data.name.full_with_opf,
       short_name: data.name.short_with_opf,
@@ -214,11 +243,15 @@ class ManagerDB {
         resolve(this._outputPath, `${this._getDate()}_${count}.txt`)
       );
       this._successOutput.write('[');
-      batch.forEach((inn, index) => {
+      batch.forEach((inn, innIndex) => {
         const json = this.db.prepare('SELECT json FROM jsons WHERE inn = ?').get(inn).json;
         if (json !== undefined) {
-          if (index === 0) this._successOutput.write(`\n${this._getJson(json)}`);
-          else this._successOutput.write(`,\n${this._getJson(json)}`);
+          const items = JSON.parse(json);
+          items.forEach((item, itemIndex) => {
+            if (innIndex === 0 && itemIndex === 0)
+              this._successOutput.write(`\n${this._getDataJson(item)}`);
+            else this._successOutput.write(`,\n${this._getDataJson(item)}`);
+          });
         }
       });
       this._successOutput.end('\n]\n');
@@ -276,6 +309,8 @@ ${
         this._validationErrorStream = createWriteStream(this._validationErrorsPath);
       validationErrors.forEach((inn) => this._validationErrorStream.write(`${inn}\n`));
       this._validationErrorStream.end(`Отчет сформирован: ${this._getDate(true)}\n`);
+    } else {
+      if (existsSync(this._validationErrorsPath)) unlinkSync(this._validationErrorsPath);
     }
 
     if (retryErrors.length) {
@@ -283,12 +318,18 @@ ${
         this._retryErrorStream = createWriteStream(this._errorsToRetryPath);
       retryErrors.forEach((inn) => this._retryErrorStream.write(`${inn}\n`));
       this._retryErrorStream.end(`Отчет сформирован: ${this._getDate(true)}\n`);
+    } else {
+      if (existsSync(this._errorsToRetryPath)) unlinkSync(this._errorsToRetryPath);
     }
   }
 
   generateReport() {
-    this.writeReport();
-    this.writeErrors();
+    try {
+      this.writeReport();
+      this.writeErrors();
+    } catch (err) {
+      this.logger.log('generalError', err);
+    }
   }
 
   async _cleanBeforeFinish() {
@@ -311,11 +352,17 @@ ${
   }
 
   async start() {
-    await this._processInput();
-    await this._requests();
-    this._getResult();
-    this.generateReport();
-    await this._cleanBeforeFinish();
+    try {
+      await this._processInput();
+      await this._requests();
+      this._getResult();
+      this.generateReport();
+      await this._cleanBeforeFinish();
+    } catch (err) {
+      this.logger.log('generalError', err);
+      await this.generateReport();
+      await this._cleanBeforeFinish();
+    }
   }
 }
 
