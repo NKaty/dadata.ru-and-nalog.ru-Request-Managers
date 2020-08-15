@@ -50,6 +50,7 @@ class Manager {
     this._tempInputStream = null;
     this._successOutput = null;
     this.withBranches = false;
+    this.branchesCount = 20;
     this.requestsPerDay = 8000;
     this.innPerFile = 500;
     this.filesPerDay = Math.floor(this.requestsPerDay / this.innPerFile);
@@ -150,7 +151,7 @@ class Manager {
           this._tempInputStream.end();
           fileCount += 1;
           this._tempInputStream = createWriteStream(
-            resolve(this._tempInputPath, `${fileCount}.txt`)
+            resolve(this._tempInputPath, `${this._getDate()}_${fileCount}.txt`)
           );
         }
         this._tempInputStream.write(`${line}\n`);
@@ -173,7 +174,13 @@ class Manager {
     });
 
     for await (const line of rl) {
-      const query = this.withBranches ? { query: line } : { query: line, branch_type: 'MAIN' };
+      const [inn, kpp] = line.split(' ');
+      let query;
+      if (kpp) query = { query: inn, kpp };
+      else
+        query = this.withBranches
+          ? { query: line, count: this.branchesCount }
+          : { query: line, branch_type: 'MAIN' };
       if (queries[queries.length - 1].length === this.requestsLength) queries.push([query]);
       else queries[queries.length - 1].push(query);
     }
