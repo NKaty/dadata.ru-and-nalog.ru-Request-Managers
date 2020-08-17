@@ -135,7 +135,9 @@ class Manager {
     let lineCount = 0;
     let fileCount = 1;
 
-    this._tempInputStream = createWriteStream(resolve(this._tempInputPath, `${fileCount}.txt`));
+    this._tempInputStream = createWriteStream(
+      resolve(this._tempInputPath, `${this._getDate()}_${fileCount}.txt`)
+    );
 
     for (const file of currentPaths) {
       const currentPath = resolve(currentDir, file);

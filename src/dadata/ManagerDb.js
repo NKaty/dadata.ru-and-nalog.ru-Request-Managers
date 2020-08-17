@@ -16,7 +16,7 @@ const Database = require('better-sqlite3');
 const APIMultiCaller = require('./APIMultiCaller');
 const Logger = require('./Logger');
 
-class ManagerDB {
+class ManagerDb {
   constructor(workingDir = process.cwd()) {
     this.inputDir = 'input';
     this.outputDir = 'output';
@@ -37,20 +37,20 @@ class ManagerDB {
     this._validationErrorStream = null;
     this._retryErrorStream = null;
     this._successOutput = null;
-    this.withBranches = true;
+    this.withBranches = false;
     this.branchesCount = 20;
     this.cleanDB = false;
     this.updateMode = true;
-    this.requestsPerDay = 24;
-    this.innPerFile = 9;
-    this.requestsLength = 6;
+    this.requestsPerDay = 1500;
+    this.innPerFile = 500;
+    this.requestsLength = 100;
     this.failureRate = 0.5;
     this.requestsLengthToCheckFailureRate = 5;
-    this.timeToWaitBeforeNextAttempt = 0.2 * 60 * 1000;
+    this.timeToWaitBeforeNextAttempt = 30 * 60 * 1000;
     this._repeatedFailure = false;
     this._stop = false;
     this._isStopErrorOccurred = false;
-    this.db = new Database(this.dbFile, { verbose: console.log });
+    this.db = new Database(this.dbFile);
     this.logger = new Logger(
       resolve(this._logsPath, `retryErrors_${this._getDate()}.log`),
       resolve(this._logsPath, `validationErrors_${this._getDate()}.log`),
@@ -68,7 +68,7 @@ class ManagerDB {
     if (!existsSync(this._reportsPath)) mkdirSync(this._reportsPath);
   }
 
-  _prepareDB() {
+  _prepareDb() {
     this.db
       .prepare(
         `CREATE TABLE IF NOT EXISTS requests (
@@ -118,7 +118,7 @@ class ManagerDB {
 
     if (!inputPaths.length) return;
 
-    this._prepareDB();
+    this._prepareDb();
     this._cleanBeforeStart();
 
     for (const file of inputPaths) {
@@ -204,7 +204,6 @@ class ManagerDB {
         );
       await this._request(queries);
     }
-    console.log(this.db.prepare('SELECT inn, status FROM requests').all());
   }
 
   _getDataJson(item) {
@@ -227,35 +226,47 @@ class ManagerDB {
     });
   }
 
-  writeJSONFiles() {
-    const inns = this.db
-      .prepare('SELECT inn FROM requests WHERE status = ?')
-      .raw()
-      .all('success')
-      .flat();
-    let count = 0;
+  _writeJSONFiles(jsonSelect, getJSON) {
+    let fileCount = 1;
+    let lineCount = 0;
+    this._successOutput = createWriteStream(
+      resolve(this._outputPath, `${this._getDate()}_${fileCount}.txt`)
+    );
+    this._successOutput.write('[');
 
-    while (inns.length) {
-      count += 1;
-      const batch = inns.splice(0, this.innPerFile).flat();
-
-      this._successOutput = createWriteStream(
-        resolve(this._outputPath, `${this._getDate()}_${count}.txt`)
-      );
-      this._successOutput.write('[');
-      batch.forEach((inn, innIndex) => {
-        const json = this.db.prepare('SELECT json FROM jsons WHERE inn = ?').get(inn).json;
-        if (json !== undefined) {
-          const items = JSON.parse(json);
-          items.forEach((item, itemIndex) => {
-            if (innIndex === 0 && itemIndex === 0)
-              this._successOutput.write(`\n${this._getDataJson(item)}`);
-            else this._successOutput.write(`,\n${this._getDataJson(item)}`);
-          });
-        }
-      });
-      this._successOutput.end('\n]\n');
+    for (const item of jsonSelect.iterate()) {
+      if (lineCount === this.innPerFile) {
+        lineCount = 0;
+        this._successOutput.end('\n]\n');
+        fileCount += 1;
+        this._successOutput = createWriteStream(
+          resolve(this._outputPath, `${this._getDate()}_${fileCount}.txt`)
+        );
+        this._successOutput.write('[');
+      }
+      const json = getJSON(item);
+      if (json !== undefined) {
+        const items = JSON.parse(json);
+        items.forEach((item, itemIndex) => {
+          if (lineCount === 0 && itemIndex === 0)
+            this._successOutput.write(`\n${this._getDataJson(item)}`);
+          else this._successOutput.write(`,\n${this._getDataJson(item)}`);
+        });
+      }
+      lineCount += 1;
     }
+
+    this._successOutput.end('\n]\n');
+  }
+
+  getCurrentResult() {
+    const innsSelect = this.db
+      .prepare('SELECT DISTINCT inn FROM requests WHERE status = ?')
+      .bind('success');
+    this._writeJSONFiles(
+      innsSelect,
+      (item) => this.db.prepare('SELECT json FROM jsons WHERE inn = ?').get(item.inn).json
+    );
   }
 
   _getResult() {
@@ -266,7 +277,12 @@ class ManagerDB {
         .all('raw', 'retry')
         .flat().length
     )
-      this.writeJSONFiles();
+      this.getCurrentResult();
+  }
+
+  getAllContent() {
+    const jsonSelect = this.db.prepare('SELECT json FROM jsons');
+    this._writeJSONFiles(jsonSelect, (item) => item.json);
   }
 
   _collectStat() {
@@ -366,4 +382,4 @@ ${
   }
 }
 
-new ManagerDB().start();
+module.exports = ManagerDb;
