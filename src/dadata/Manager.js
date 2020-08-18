@@ -17,6 +17,7 @@ const {
 const { createInterface } = require('readline');
 const APIMultiCaller = require('./APIMultiCaller');
 const Logger = require('./Logger');
+const extractData = require('./extractData');
 
 class Manager {
   constructor(workingDir = process.cwd()) {
@@ -75,6 +76,7 @@ class Manager {
       resolve(this._logsPath, `success_${this._getDate()}.log`)
     );
     this.apiMultiCaller = new APIMultiCaller({ logger: this.logger });
+    this.extractData = extractData;
     this._createDirStructure();
   }
 
@@ -190,28 +192,8 @@ class Manager {
     return queries;
   }
 
-  _getJson(response) {
-    const data = response.data;
-    return JSON.stringify({
-      full_name: data.name.full_with_opf,
-      short_name: data.name.short_with_opf,
-      inn: data.inn,
-      kpp: data.kpp,
-      ogrn: data.ogrn,
-      ogrn_date: data.ogrn_date,
-      type: data.type,
-      okpo: data.okpo,
-      address: data.address.data.source,
-      management: {
-        post: data.management && data.management.post,
-        name: data.management && data.management.name,
-      },
-      status: data.state && data.state.status,
-    });
-  }
-
   _processResponse(response) {
-    const json = this._getJson(response);
+    const json = JSON.stringify(this.extractData(response));
     if (this._firstJSON) {
       this._successOutput.write(`\n${json}`);
       this._firstJSON = false;

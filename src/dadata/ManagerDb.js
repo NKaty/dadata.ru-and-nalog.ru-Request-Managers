@@ -15,6 +15,7 @@ const { createInterface } = require('readline');
 const Database = require('better-sqlite3');
 const APIMultiCaller = require('./APIMultiCaller');
 const Logger = require('./Logger');
+const extractData = require('./extractData');
 
 class ManagerDb {
   constructor(workingDir = process.cwd()) {
@@ -58,6 +59,7 @@ class ManagerDb {
       resolve(this._logsPath, `success_${this._getDate()}.log`)
     );
     this.apiMultiCaller = new APIMultiCaller({ logger: this.logger, isSuccessLogging: true });
+    this.extractData = extractData;
     this._createDirStructure();
   }
 
@@ -206,31 +208,11 @@ class ManagerDb {
     }
   }
 
-  _getDataJson(item) {
-    const data = item.data;
-    return JSON.stringify({
-      full_name: data.name.full_with_opf,
-      short_name: data.name.short_with_opf,
-      inn: data.inn,
-      kpp: data.kpp,
-      ogrn: data.ogrn,
-      ogrn_date: data.ogrn_date,
-      type: data.type,
-      okpo: data.okpo,
-      address: data.address.data.source,
-      management: {
-        post: data.management && data.management.post,
-        name: data.management && data.management.name,
-      },
-      status: data.state && data.state.status,
-    });
-  }
-
   _writeJSONFiles(jsonSelect, getJSON) {
     let fileCount = 1;
     let lineCount = 0;
     this._successOutput = createWriteStream(
-      resolve(this._outputPath, `${this._getDate()}_${fileCount}.txt`)
+      resolve(this._outputPath, `${this._getDate()}_${fileCount}.json`)
     );
     this._successOutput.write('[');
 
@@ -240,7 +222,7 @@ class ManagerDb {
         this._successOutput.end('\n]\n');
         fileCount += 1;
         this._successOutput = createWriteStream(
-          resolve(this._outputPath, `${this._getDate()}_${fileCount}.txt`)
+          resolve(this._outputPath, `${this._getDate()}_${fileCount}.json`)
         );
         this._successOutput.write('[');
       }
@@ -249,8 +231,8 @@ class ManagerDb {
         const items = JSON.parse(json);
         items.forEach((item, itemIndex) => {
           if (lineCount === 0 && itemIndex === 0)
-            this._successOutput.write(`\n${this._getDataJson(item)}`);
-          else this._successOutput.write(`,\n${this._getDataJson(item)}`);
+            this._successOutput.write(`\n${JSON.stringify(this.extractData(item))}`);
+          else this._successOutput.write(`,\n${JSON.stringify(this.extractData(item))}`);
         });
       }
       lineCount += 1;
