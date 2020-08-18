@@ -291,6 +291,7 @@ class ManagerDb {
     );
     return {
       requests: this.db.prepare('SELECT COUNT(inn) AS count FROM requests').get().count,
+      distinctRequests: this.db.prepare('SELECT DISTINCT inn FROM requests').all().length,
       success: selectStatus.get('success').count,
       validationErrors: selectStatus.get('invalid').count,
       requestErrors: selectStatus.get('retry').count,
@@ -300,6 +301,7 @@ class ManagerDb {
   writeReport() {
     const stat = this._collectStat();
     const report = `Общее количество ИНН: ${stat.requests}
+  из них повторяется: ${stat.requests - stat.distinctRequests}
 Выполнено запросов: ${stat.success + stat.validationErrors + stat.requestErrors}
   успешных: ${stat.success}
   неудачных: ${stat.validationErrors + stat.requestErrors}

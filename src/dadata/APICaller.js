@@ -51,7 +51,7 @@ class APICaller {
       const json = await response.json();
 
       if (json.suggestions && json.suggestions.length === 0)
-        throw new ValidationError('Invalid inn.');
+        throw new ValidationError('Invalid inn or there is no data in dadata.');
 
       if (this.isSuccessLogging) {
         if (json.suggestions && json.suggestions[0].data)
