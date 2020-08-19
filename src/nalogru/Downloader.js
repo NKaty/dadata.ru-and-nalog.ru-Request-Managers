@@ -5,6 +5,7 @@ const { Agent } = require('https');
 const { resolve } = require('path');
 const fetch = require('node-fetch');
 const ratelimit = require('promise-ratelimit');
+const { ValidationError, RequestError, StopError } = require('./customErrors');
 
 const streamPipeline = promisify(pipeline);
 
@@ -54,12 +55,13 @@ class Downloader {
       json = await response.json();
 
       if (json && (json.captchaRequired || json.ERRORS)) {
-        throw Error('The captcha is required.');
+        throw new StopError('The captcha is required.');
       }
 
       return json.t;
     } catch (err) {
-      this.logger.log(err, query, region, page);
+      this.logger.log('retryError', err, query, region, page, '1');
+      if (err instanceof StopError) throw err;
       return false;
     }
   }
@@ -74,10 +76,11 @@ class Downloader {
       json = await response.json();
 
       if (json && (json.captchaRequired || json.ERRORS)) {
-        throw Error('The captcha is required.');
+        throw new StopError('The captcha is required.');
       }
     } catch (err) {
-      this.logger.log(err, query, region, page);
+      this.logger.log('retryError', err, query, region, page, '2');
+      if (err instanceof StopError) throw err;
       return false;
     }
 
@@ -96,7 +99,7 @@ class Downloader {
         );
       } else {
         let docs = json.rows;
-        if (page === '' || page === '1') {
+        if (docs.length && (page === '' || page === '1')) {
           const pages = Math.ceil(docs[0].cnt / docs.length);
           if (pages > 1) {
             const results = await Promise.allSettled(
@@ -109,7 +112,7 @@ class Downloader {
               ...docs,
               ...results.reduce((acc, result) => {
                 if (result.status === 'fulfilled') acc.push(result.value);
-                else this.logger.log(result.reason);
+                else this.logger.log(result.reason, '3');
                 return acc;
               }, []),
             ].flat();
@@ -118,7 +121,8 @@ class Downloader {
         return docs;
       }
     } catch (err) {
-      this.logger.log(err, query, region, page);
+      this.logger.log('retryError', err, query, region, page, '4');
+      if (err instanceof StopError) throw err;
       return false;
     }
   }
@@ -126,9 +130,9 @@ class Downloader {
   async _getPage(query, region, page) {
     await this.throttle();
     const token = await this._sendForm(query, region, page);
-    if (!token) throw Error(`${query} ${region} ${page} No token!`);
+    if (!token) throw new RequestError(`${query} ${region} ${page} No token!`);
     const results = await this._getSearchResult(query, region, token, page);
-    if (!results) throw Error(`${query} ${region} ${page} No documents!`);
+    if (!results) throw new RequestError(`${query} ${region} ${page} No documents!`);
     return results;
   }
 
@@ -140,11 +144,11 @@ class Downloader {
       });
       const json = await response.json();
       if (json && (json.captchaRequired || json.ERRORS)) {
-        throw Error('The captcha is required.');
+        throw new StopError('The captcha is required.');
       }
       await this._waitForResponse(json.t, doc.i);
     } catch (err) {
-      this.logger.log(err, doc.i);
+      this.logger.log('retryError', err, doc.i, '5');
       throw err;
     }
   }
@@ -157,12 +161,12 @@ class Downloader {
       );
       const json = await response.json();
       if (json && (json.captchaRequired || json.ERRORS)) {
-        throw Error('The captcha is required.');
+        throw new StopError('The captcha is required.');
       }
       if (json.status === 'ready') await this._downloadFile(token, inn);
       else setTimeout(async () => await this._waitForResponse(token, inn), 1000);
     } catch (err) {
-      this.logger.log(err, inn);
+      this.logger.log('retryError', err, inn, '6');
       throw err;
     }
   }
@@ -175,7 +179,8 @@ class Downloader {
       await streamPipeline(response.body, writable);
       this.logger.log(`${inn}.pdf is downloaded.`);
     } catch (err) {
-      this.logger.log(err, inn);
+      this.logger.log('retryError', err, inn, '7');
+      if (err instanceof StopError) throw err;
     }
   }
 
@@ -184,43 +189,72 @@ class Downloader {
     else return [params.query, params.region];
   }
 
-  async getMetaData(params) {
-    const [query, region] = this._getRequestParams(params);
+  async getMetaData(inn) {
+    try {
+      await this.throttle();
+      const token = await this._sendForm(inn);
 
+      if (!token) throw new RequestError(inn);
+
+      const results = await this._getSearchResult(inn, '', token);
+
+      if (!results) throw new RequestError(inn);
+      if (!results.length) throw new ValidationError('Invalid inn');
+
+      this.logger.log('success', `${results[0].i} Meta data is received.`);
+      return results;
+    } catch (err) {
+      if (err instanceof StopError) throw new StopError(inn);
+      else if (err instanceof ValidationError) {
+        this.logger('validationError', err, inn);
+        throw new ValidationError(inn);
+      } else throw err;
+    }
+  }
+
+  async _getMetaData(params) {
+    const [query, region] = this._getRequestParams(params);
     try {
       await this.throttle();
       const token = await this._sendForm(query, region);
       if (!token) return [];
       const results = await this._getSearchResult(query, region, token);
+      if (results && !results.length) throw new ValidationError('Nothing was found.');
+      if (results)
+        results.map((item) => {
+          this.logger.log('success', `${item.i} Meta data is received.`);
+        });
       return results || [];
     } catch (err) {
-      this.logger.log(err, query, region);
+      if (err instanceof ValidationError) this.logger.log('validationError', err, query, region);
+      else this.logger.log('retryError', err, query, region, '8');
       return [];
     }
   }
 
-  convertMetaData(data) {
-    return data.map((item) => {
-      this.logger.log(`${item.i} Meta data is received.`);
-      return Object.keys(item).reduce((acc, field) => {
-        if (field in this.map) {
-          if (field === 'g') {
-            const subFields = item[field].split(': ');
-            acc[this.map[field]] = {
-              post: subFields[0],
-              name: subFields[1],
-            };
-          } else {
-            acc[this.map[field]] = item[field];
-          }
+  convertMetaDataItem(item) {
+    return Object.keys(item).reduce((acc, field) => {
+      if (field in this.map) {
+        if (field === 'g') {
+          const subFields = item[field].split(': ');
+          acc[this.map[field]] = {
+            post: subFields[0],
+            name: subFields[1],
+          };
+        } else {
+          acc[this.map[field]] = item[field];
         }
-        return acc;
-      }, {});
-    });
+      }
+      return acc;
+    }, {});
+  }
+
+  convertMetaData(data) {
+    return data.map((item) => this.convertMetaDataItem(item));
   }
 
   async getMetaObject(params) {
-    const data = await this.getMetaData(params);
+    const data = await this._getMetaData(params);
     return this.convertMetaData(data);
   }
 
@@ -235,9 +269,12 @@ class Downloader {
       if (!results) return;
       await Promise.allSettled(results.map((result) => this._requestFile(result)));
     } catch (err) {
-      this.logger.log(err, query, region);
+      this.logger.log('retryError', err, query, region, '9');
     }
   }
 }
 
 module.exports = Downloader;
+
+new Downloader().getMetaObject('колодцам').then(console.log);
+// new Downloader().getDocs('колодцами').then(console.log);

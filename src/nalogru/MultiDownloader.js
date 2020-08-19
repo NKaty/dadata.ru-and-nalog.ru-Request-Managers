@@ -1,5 +1,6 @@
 const { Agent } = require('https');
 const Downloader = require('./Downloader');
+const { ValidationError, RequestError, StopError } = require('./customErrors');
 
 class MultiDownloader {
   constructor(options = {}) {
@@ -33,16 +34,25 @@ class MultiDownloader {
       const results = await Promise.allSettled(
         queries.map((query) => this.downloader.getMetaData(query))
       );
-      data = results
-        .reduce((acc, result) => {
-          if (result.status === 'fulfilled') acc.push(result.value);
+      data = results.reduce(
+        (acc, result) => {
+          if (result.status === 'fulfilled') acc[0].push(result.value);
+          else if (result.reason instanceof RequestError) acc[1].push(result.reason.message);
+          else if (result.reason instanceof StopError) acc[2].push(result.reason.message);
+          else if (result.reason instanceof ValidationError) acc[3].push(result.reason.message);
           return acc;
-        }, [])
-        .flat();
+        },
+        [[], [], [], []]
+      );
+      // data[0] = data[0].flat();
     } catch (err) {
       this.logger.log(err);
     }
     return data;
+  }
+
+  convertMetaDataItem(item) {
+    return this.downloader.convertMetaDataItem(item);
   }
 
   convertMetaData(data) {
@@ -51,7 +61,7 @@ class MultiDownloader {
 
   async getMetaObject(queries) {
     const data = await this.getMetaData(queries);
-    return this.convertMetaData(data);
+    return this.convertMetaData(data[0].flat());
   }
 }
 
