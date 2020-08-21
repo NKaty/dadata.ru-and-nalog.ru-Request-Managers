@@ -1,6 +1,6 @@
 const fetch = require('node-fetch');
 const dotenv = require('dotenv');
-const { ValidationError, RequestError, StopError } = require('./customErrors');
+const { ValidationError, RequestError, StopError } = require('../common/customErrors');
 
 dotenv.config();
 

@@ -1,6 +1,6 @@
 // const Manager = require('./Manager');
-const Manager = require('./ManagerDb');
+const Manager = require('./APIRequestManagerDb');
 
 const workingDir = process.argv[2];
 
-new Manager(workingDir).start().catch(console.log);
+new Manager({ workingDir, dbFile: 'dadata.db' }).start().catch(console.log);

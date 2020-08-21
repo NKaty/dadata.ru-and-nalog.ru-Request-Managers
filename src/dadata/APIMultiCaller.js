@@ -1,7 +1,7 @@
 const { Agent } = require('https');
 const PromiseThrottle = require('promise-throttle');
 const APICaller = require('./APICaller');
-const { ValidationError, RequestError, StopError } = require('./customErrors');
+const { ValidationError, RequestError, StopError } = require('../common/customErrors');
 
 class APIMultiCaller {
   constructor(options = {}) {

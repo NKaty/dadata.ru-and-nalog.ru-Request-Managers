@@ -6,4 +6,5 @@
 /output
 /temp
 /reports
+*.db
 .env

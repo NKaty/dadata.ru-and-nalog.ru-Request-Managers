@@ -1,6 +1,6 @@
 const { Agent } = require('https');
 const Downloader = require('./Downloader');
-const { ValidationError, RequestError, StopError } = require('./customErrors');
+const { ValidationError, RequestError, StopError } = require('../common/customErrors');
 
 class MultiDownloader {
   constructor(options = {}) {
@@ -48,6 +48,7 @@ class MultiDownloader {
     } catch (err) {
       this.logger.log(err);
     }
+    console.log(data);
     return data;
   }
 

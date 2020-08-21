@@ -5,7 +5,7 @@ const { Agent } = require('https');
 const { resolve } = require('path');
 const fetch = require('node-fetch');
 const ratelimit = require('promise-ratelimit');
-const { ValidationError, RequestError, StopError } = require('./customErrors');
+const { ValidationError, RequestError, StopError } = require('../common/customErrors');
 
 const streamPipeline = promisify(pipeline);
 
@@ -190,25 +190,31 @@ class Downloader {
   }
 
   async getMetaData(inn) {
+    const [query, region] = this._getRequestParams(inn);
     try {
       await this.throttle();
-      const token = await this._sendForm(inn);
+      const token = await this._sendForm(query, region);
 
-      if (!token) throw new RequestError(inn);
+      if (!token) throw new RequestError('No token');
 
-      const results = await this._getSearchResult(inn, '', token);
+      const results = await this._getSearchResult(query, region, token);
 
-      if (!results) throw new RequestError(inn);
-      if (!results.length) throw new ValidationError('Invalid inn');
+      if (!results) throw new RequestError('No documents.');
+      if (!results.length) throw new ValidationError('Invalid inn.');
+
+      // if (Math.random() > 0.3) throw new RequestError('my');
 
       this.logger.log('success', `${results[0].i} Meta data is received.`);
       return results;
     } catch (err) {
       if (err instanceof StopError) throw new StopError(inn);
       else if (err instanceof ValidationError) {
-        this.logger('validationError', err, inn);
+        this.logger.log('validationError', err, inn);
         throw new ValidationError(inn);
-      } else throw err;
+      } else {
+        this.logger.log('retryError', err, inn);
+        throw new RequestError(inn);
+      }
     }
   }
 
@@ -276,5 +282,5 @@ class Downloader {
 
 module.exports = Downloader;
 
-new Downloader().getMetaObject('колодцам').then(console.log);
+// new Downloader().getMetaObject('колодцам').then(console.log);
 // new Downloader().getDocs('колодцами').then(console.log);

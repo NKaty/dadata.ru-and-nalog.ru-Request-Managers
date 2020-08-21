@@ -13,34 +13,43 @@ const {
 } = require('fs');
 const { createInterface } = require('readline');
 const Database = require('better-sqlite3');
-const MultiDownloader = require('./MultiDownloader');
 const Logger = require('./Logger');
 
-class Manager {
-  constructor(workingDir = process.cwd()) {
-    this.inputDir = 'input';
-    this.outputDir = 'output';
-    this.logsDir = 'logs';
-    this.reportsDir = 'reports';
+class RequestManagerDb {
+  constructor(options = {}) {
+    if (new.target === RequestManagerDb)
+      throw new TypeError('You cannot instantiate Graph class directly');
+
+    this.inputDir = options.inputDir || 'input';
+    this.outputDir = options.outputDir || 'output';
+    this.logsDir = options.logsDir || 'logs';
+    this.reportsDir = options.reportsDir || 'reports';
     this.reportFile = 'report.txt';
     this.errorsToRetryFile = 'errorsToRetry.txt';
     this.validationErrorsFile = 'validationErrors.txt';
-    this.dbFile = 'nalogru.db';
-    this._workingDir = workingDir;
-    this._inputPath = resolve(this._workingDir, this.inputDir);
-    this._outputPath = resolve(this._workingDir, this.outputDir);
-    this._logsPath = resolve(this._workingDir, this.logsDir);
-    this._reportsPath = resolve(this._workingDir, this.reportsDir);
+    this.dbFile = options.dbFile || 'data.db';
+    this.workingDir = options.workingDir || process.cwd();
+    this._inputPath = resolve(this.workingDir, this.inputDir);
+    this._outputPath = resolve(this.workingDir, this.outputDir);
+    this._logsPath = resolve(this.workingDir, this.logsDir);
+    this._reportsPath = resolve(this.workingDir, this.reportsDir);
     this._mainReportPath = resolve(this._reportsPath, this.reportFile);
     this._errorsToRetryPath = resolve(this._reportsPath, this.errorsToRetryFile);
     this._validationErrorsPath = resolve(this._reportsPath, this.validationErrorsFile);
     this._validationErrorStream = null;
     this._retryErrorStream = null;
     this._successOutput = null;
-    this.cleanDB = false;
-    this.updateMode = true;
-    this.innPerFile = 500;
-    this.requestsLength = 100;
+    this.cleanDB = options.cleanDB || false;
+    this.updateMode = options.updateMode || true;
+    this.innPerFile = options.innPerFile || 500;
+    this.requestsLength = options.requestsLength || 100;
+    this.failureRate = options.failureRate || 0.5;
+    this.requestsLengthToCheckFailureRate = options.requestsLengthToCheckFailureRate || 5;
+    this.timeToWaitBeforeNextAttempt = options.timeToWaitBeforeNextAttempt || 30 * 60 * 1000;
+    this._repeatedFailure = false;
+    this._stop = false;
+    this._isStopErrorOccurred = false;
+    this._stopErrorMessage = '';
     this.db = new Database(this.dbFile);
     this.logger = new Logger(
       resolve(this._logsPath, `retryErrors_${this._getDate()}.log`),
@@ -48,9 +57,10 @@ class Manager {
       resolve(this._logsPath, `generalErrors_${this._getDate()}.log`),
       resolve(this._logsPath, `success_${this._getDate()}.log`)
     );
-    this.multiDownloader = new MultiDownloader({ logger: this.logger });
-    this.extractData = this.multiDownloader.convertMetaDataItem.bind(this.multiDownloader);
+    this._makeRequests = null;
+    this._extractData = null;
     this._createDirStructure();
+    this._createDb();
   }
 
   _createDirStructure() {
@@ -60,7 +70,7 @@ class Manager {
     if (!existsSync(this._reportsPath)) mkdirSync(this._reportsPath);
   }
 
-  _prepareDb() {
+  _createDb() {
     this.db
       .prepare(
         `CREATE TABLE IF NOT EXISTS requests (
@@ -69,7 +79,7 @@ class Manager {
              status TEXT CHECK(status IN ('raw', 'success', 'invalid', 'retry')))`
       )
       .run();
-    this.db.prepare('DELETE FROM requests').run();
+
     this.db
       .prepare(
         `CREATE TABLE IF NOT EXISTS jsons (
@@ -77,6 +87,10 @@ class Manager {
              json TEXT)`
       )
       .run();
+  }
+
+  _prepareDb() {
+    this.db.prepare('DELETE FROM requests').run();
     if (this.cleanDB) this.db.prepare('DELETE FROM jsons').run();
   }
 
@@ -134,11 +148,15 @@ class Manager {
     }
   }
 
+  _getSuccessItemInn(item) {
+    throw new Error('Must be implemented for sub classes.');
+  }
+
   _updateAfterRequest(success, validationErrors, requestErrors, stopErrors) {
     const updateStatus = this.db.prepare('UPDATE requests SET status = ? WHERE inn = ?');
 
     success.forEach((item) => {
-      const inn = item[0].i;
+      const inn = this._getSuccessItemInn(item);
       if (this.db.prepare('SELECT inn FROM jsons WHERE inn = ?').get(inn) === undefined) {
         this.db
           .prepare('INSERT INTO jsons (inn, json) VALUES (?, ?)')
@@ -155,7 +173,7 @@ class Manager {
   }
 
   async _request(queries) {
-    const response = await this.multiDownloader.getMetaData(queries);
+    const response = await this._makeRequests(queries);
     const success = response[0];
     const requestErrors = response[1];
     const stopErrors = response[2];
@@ -177,16 +195,20 @@ class Manager {
     }
   }
 
+  _getQueryArray() {
+    throw new Error('Must be implemented for sub classes.');
+  }
+
+  _getQueries(queryArray) {
+    throw new Error('Must be implemented for sub classes.');
+  }
+
   async _requests() {
-    const queryArray = this.db
-      .prepare('SELECT inn FROM requests WHERE status IN (?, ?) ORDER BY status')
-      .bind('raw', 'retry')
-      .raw()
-      .all();
+    const queryArray = this._getQueryArray();
 
     while (queryArray.length) {
       if (this._stop) return;
-      const queries = queryArray.splice(0, this.requestsLength).flat();
+      const queries = this._getQueries(queryArray);
       await this._request(queries);
     }
   }
@@ -214,8 +236,8 @@ class Manager {
         const items = JSON.parse(json);
         items.forEach((item, itemIndex) => {
           if (lineCount === 0 && itemIndex === 0)
-            this._successOutput.write(`\n${JSON.stringify(this.extractData(item))}`);
-          else this._successOutput.write(`,\n${JSON.stringify(this.extractData(item))}`);
+            this._successOutput.write(`\n${JSON.stringify(this._extractData(item))}`);
+          else this._successOutput.write(`,\n${JSON.stringify(this._extractData(item))}`);
         });
       }
       lineCount += 1;
@@ -271,12 +293,8 @@ class Manager {
   успешных: ${stat.success}
   неудачных: ${stat.validationErrors + stat.requestErrors}
     с ошибками в теле запроса (ИНН): ${stat.validationErrors}
-    с сетевыми ошибками (будет повторный запрос): ${stat.requestErrors}
-${
-  this._isStopErrorOccurred
-    ? 'Внимание. Рекомендуется проверить лимиты на количество запросов в день, секунду и на количество новых соединений в минуту.'
-    : ''
-}
+    с сетевыми ошибками (нужен повторный запрос): ${stat.requestErrors}
+${this._isStopErrorOccurred ? this._stopErrorMessage : ''}
 Отчет сформирован: ${this._getDate(true)}`;
 
     writeFileSync(this._mainReportPath, report);
@@ -334,10 +352,6 @@ ${
     }
   }
 
-  getReq() {
-    console.log(this.db.prepare('SELECT * FROM requests').all());
-  }
-
   async start() {
     try {
       await this._processInput();
@@ -353,6 +367,4 @@ ${
   }
 }
 
-new Manager().start();
-// new Manager().getReq();
-// new Manager().getAllContent();
+module.exports = RequestManagerDb;
