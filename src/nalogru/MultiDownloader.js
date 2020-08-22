@@ -19,37 +19,31 @@ class MultiDownloader {
     });
   }
 
+  _processResults(results) {
+    return results.reduce(
+      (acc, result) => {
+        if (result.status === 'fulfilled') acc[0].push(result.value);
+        else if (result.reason instanceof RequestError) acc[1].push(result.reason.message);
+        else if (result.reason instanceof StopError) acc[2].push(result.reason.message);
+        else if (result.reason instanceof ValidationError) acc[3].push(result.reason.message);
+        return acc;
+      },
+      [[], [], [], []]
+    );
+  }
+
   async getDocs(queries) {
-    try {
-      await Promise.allSettled(queries.map((query) => this.downloader.getDocs(query)));
-    } catch (err) {
-      this.logger.log(err);
-    }
+    const results = await Promise.allSettled(
+      queries.map((query) => this.downloader.getDocByInn(query))
+    );
+    return this._processResults(results);
   }
 
   async getMetaData(queries) {
-    let data = [];
-
-    try {
-      const results = await Promise.allSettled(
-        queries.map((query) => this.downloader.getMetaData(query))
-      );
-      data = results.reduce(
-        (acc, result) => {
-          if (result.status === 'fulfilled') acc[0].push(result.value);
-          else if (result.reason instanceof RequestError) acc[1].push(result.reason.message);
-          else if (result.reason instanceof StopError) acc[2].push(result.reason.message);
-          else if (result.reason instanceof ValidationError) acc[3].push(result.reason.message);
-          return acc;
-        },
-        [[], [], [], []]
-      );
-      // data[0] = data[0].flat();
-    } catch (err) {
-      this.logger.log(err);
-    }
-    console.log(data);
-    return data;
+    const results = await Promise.allSettled(
+      queries.map((query) => this.downloader.getMetaDataByInn(query))
+    );
+    return this._processResults(results);
   }
 
   convertMetaDataItem(item) {

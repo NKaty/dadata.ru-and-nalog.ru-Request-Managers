@@ -177,10 +177,10 @@ class Downloader {
       const path = resolve(this.path, `${inn}.pdf`);
       const writable = createWriteStream(path);
       await streamPipeline(response.body, writable);
-      this.logger.log(`${inn}.pdf is downloaded.`);
+      this.logger.log('success', `${inn}.pdf is downloaded.`);
     } catch (err) {
       this.logger.log('retryError', err, inn, '7');
-      if (err instanceof StopError) throw err;
+      throw err;
     }
   }
 
@@ -189,7 +189,7 @@ class Downloader {
     else return [params.query, params.region];
   }
 
-  async getMetaData(inn) {
+  async getMetaDataByInn(inn) {
     const [query, region] = this._getRequestParams(inn);
     try {
       await this.throttle();
@@ -211,10 +211,10 @@ class Downloader {
       else if (err instanceof ValidationError) {
         this.logger.log('validationError', err, inn);
         throw new ValidationError(inn);
-      } else {
+      } else if (err instanceof ValidationError) {
         this.logger.log('retryError', err, inn);
         throw new RequestError(inn);
-      }
+      } else throw new RequestError(inn);
     }
   }
 
@@ -262,6 +262,35 @@ class Downloader {
   async getMetaObject(params) {
     const data = await this._getMetaData(params);
     return this.convertMetaData(data);
+  }
+
+  async getDocByInn(inn) {
+    const [query, region] = this._getRequestParams(inn);
+
+    try {
+      await this.throttle();
+      const token = await this._sendForm(query, region);
+
+      if (!token) throw new RequestError('No token');
+
+      const results = await this._getSearchResult(query, region, token);
+
+      if (!results) throw new RequestError('No documents.');
+      if (!results.length) throw new ValidationError('Invalid inn.');
+      // if (Math.random() > 0.3) throw new RequestError('my');
+
+      await this._requestFile(results[0]);
+      return inn;
+    } catch (err) {
+      if (err instanceof StopError) throw new StopError(inn);
+      else if (err instanceof ValidationError) {
+        this.logger.log('validationError', err, inn);
+        throw new ValidationError(inn);
+      } else if (err instanceof RequestError) {
+        this.logger.log('retryError', err, inn);
+        throw new RequestError(inn);
+      } else throw new RequestError(inn);
+    }
   }
 
   async getDocs(params) {
