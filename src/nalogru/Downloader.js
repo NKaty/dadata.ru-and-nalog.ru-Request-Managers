@@ -164,7 +164,13 @@ class Downloader {
         throw new StopError('The captcha is required.');
       }
       if (json.status === 'ready') await this._downloadFile(token, inn);
-      else setTimeout(async () => await this._waitForResponse(token, inn), 1000);
+      else
+        await new Promise((resolve) =>
+          setTimeout(async () => {
+            await this._waitForResponse(token, inn);
+            resolve();
+          }, 1000)
+        );
     } catch (err) {
       this.logger.log('retryError', err, inn, '6');
       throw err;

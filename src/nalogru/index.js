@@ -24,6 +24,9 @@
 // .then(console.log)
 // .catch(logger.log);
 
-const MetaDataRequestManagerDb = require('./MetaDataRequestManagerDb');
-new MetaDataRequestManagerDb({ dbFile: 'nalogru.db' }).start();
+// const MetaDataRequestManagerDb = require('./MetaDataRequestManagerDb');
+// new MetaDataRequestManagerDb({ dbFile: 'nalogru.db' }).start();
 // new MetaDataManager({ dbFile: 'nalogru.db' }).getAllContent();
+
+const PDFRequestManagerDb = require('./PDFRequestManagerDb');
+new PDFRequestManagerDb({ dbFile: 'pdf.db' }).start();
