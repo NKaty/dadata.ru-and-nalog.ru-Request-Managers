@@ -21,7 +21,7 @@ class APIRequestManagerDb extends RequestManagerDb {
 
   _getQueryArray() {
     return this.db
-      .prepare('SELECT inn FROM requests WHERE status IN (?, ?) ORDER BY status LIMIT ?')
+      .prepare('SELECT DISTINCT inn FROM requests WHERE status IN (?, ?) ORDER BY status LIMIT ?')
       .bind('raw', 'retry', this.requestsPerDay)
       .raw()
       .all();

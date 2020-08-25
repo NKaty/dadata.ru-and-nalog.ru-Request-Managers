@@ -17,7 +17,7 @@ class MetaDataRequestManagerDb extends RequestManagerDb {
 
   _getQueryArray() {
     return this.db
-      .prepare('SELECT inn FROM requests WHERE status IN (?, ?) ORDER BY status')
+      .prepare('SELECT DISTINCT inn FROM requests WHERE status IN (?, ?) ORDER BY status')
       .bind('raw', 'retry')
       .raw()
       .all();
