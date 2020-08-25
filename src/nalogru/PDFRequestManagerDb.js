@@ -6,8 +6,8 @@ class PDFRequestManagerDb extends BaseRequestManagerDb {
     super(options);
     this._stopErrorMessage =
       'Внимание. Произошла ошибка: The captcha is required. Рекомендуется проверить время паузы между запросами.';
-    this.downloader = new MultiDownloader({ logger: this.logger, path: this._outputPath });
-    this._makeRequests = this.downloader.getDocs.bind(this.downloader);
+    this.downloader = new MultiDownloader({ logger: this.logger, outputPath: this._outputPath });
+    this._makeRequests = this.downloader.getDocsByInn.bind(this.downloader);
   }
 
   _insertRequest(inn) {

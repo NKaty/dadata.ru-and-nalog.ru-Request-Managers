@@ -258,9 +258,7 @@ ${this._isStopErrorOccurred ? this._stopErrorMessage : ''}
       });
 
       await Promise.allSettled(streamPromises);
-      console.log('start');
       await this.logger.closeStreams();
-      console.log('end');
     } catch (err) {
       console.log(err);
     }

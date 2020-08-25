@@ -7,7 +7,7 @@ class MetaDataRequestManagerDb extends RequestManagerDb {
     this._stopErrorMessage =
       'Внимание. Произошла ошибка: The captcha is required. Рекомендуется проверить время паузы между запросами.';
     this.downloader = new MultiDownloader({ logger: this.logger });
-    this._makeRequests = this.downloader.getMetaData.bind(this.downloader);
+    this._makeRequests = this.downloader.getMetaDataByInn.bind(this.downloader);
     this._extractData = this.downloader.convertMetaDataItem.bind(this.downloader);
   }
 

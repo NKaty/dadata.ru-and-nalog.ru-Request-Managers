@@ -11,7 +11,7 @@ const streamPipeline = promisify(pipeline);
 
 class Downloader {
   constructor(options = {}) {
-    this.path = options.path || '';
+    this.outputPath = options.outputPath || resolve(process.cwd(), 'output');
     this.httpsAgent =
       options.httpsAgent ||
       new Agent({
@@ -36,6 +36,19 @@ class Downloader {
     };
   }
 
+  async _makeRequest(url, options = { agent: this.httpsAgent }) {
+    let json;
+    const response = await fetch(url, options);
+
+    if (response.ok) json = await response.json();
+    else throw new RequestError('An error occurred during the request.');
+
+    if (json && (json.captchaRequired || json.ERRORS))
+      throw new StopError('The captcha is required.');
+
+    return json;
+  }
+
   async _sendForm(query, region, page = '') {
     const params = new URLSearchParams();
     params.append('vyp3CaptchaToken', '');
@@ -43,62 +56,48 @@ class Downloader {
     params.append('query', `${query}`);
     params.append('region', `${region}`);
     params.append('PreventChromeAutocomplete', '');
-    let json;
 
     try {
-      const response = await fetch(this.url, {
+      const json = await this._makeRequest(this.url, {
         method: 'POST',
         agent: this.httpsAgent,
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: params,
       });
-      json = await response.json();
-
-      if (json && (json.captchaRequired || json.ERRORS)) {
-        throw new StopError('The captcha is required.');
-      }
-
       return json.t;
     } catch (err) {
-      this.logger.log('retryError', err, query, region, page, '1');
-      if (err instanceof StopError) throw err;
-      return false;
+      this.logger.log('retryError', err, query, region, page);
+      throw err;
     }
   }
 
   async _getSearchResult(query, region, token, page = '') {
     let json;
-    try {
-      const response = await fetch(
-        `${this.url}search-result/${token}?r=${new Date().getTime()}&_=${new Date().getTime()}`,
-        { agent: this.httpsAgent }
-      );
-      json = await response.json();
+    let docs;
 
-      if (json && (json.captchaRequired || json.ERRORS)) {
-        throw new StopError('The captcha is required.');
-      }
+    try {
+      json = await this._makeRequest(
+        `${this.url}search-result/${token}?r=${new Date().getTime()}&_=${new Date().getTime()}`
+      );
     } catch (err) {
-      this.logger.log('retryError', err, query, region, page, '2');
-      if (err instanceof StopError) throw err;
-      return false;
+      this.logger.log('retryError', err, query, region, page);
+      throw err;
     }
 
     try {
       if (json.status === 'wait') {
-        return new Promise((resolve) =>
+        docs = await new Promise((resolve, reject) =>
           setTimeout(async () => {
             try {
               const results = await this._getSearchResult(query, region, token, page);
               resolve(results);
             } catch (err) {
-              this.logger.log(err, query, region, page);
-              resolve(false);
+              reject(err);
             }
           }, 1000)
         );
       } else {
-        let docs = json.rows;
+        docs = json.rows;
         if (docs.length && (page === '' || page === '1')) {
           const pages = Math.ceil(docs[0].cnt / docs.length);
           if (pages > 1) {
@@ -117,56 +116,40 @@ class Downloader {
             ].flat();
           }
         }
-        return docs;
       }
+      return docs;
     } catch (err) {
-      this.logger.log('retryError', err, query, region, page, '4');
-      if (err instanceof StopError) throw err;
-      return false;
+      this.logger.log('retryError', err, query, region, page);
+      throw err;
     }
   }
 
   async _getPage(query, region, page) {
     await this.throttle();
     const token = await this._sendForm(query, region, page);
-    if (!token) throw new RequestError('No token!');
-    const results = await this._getSearchResult(query, region, token, page);
-    if (!results) throw new RequestError('No documents!');
-    return results;
+    return this._getSearchResult(query, region, token, page);
   }
 
   async _requestFile(doc) {
     try {
       await this.throttle();
-      const response = await fetch(`${this.url}vyp-request/${doc.t}?r=&_=${new Date().getTime()}`, {
-        agent: this.httpsAgent,
-      });
-      const json = await response.json();
-
-      if (json && (json.captchaRequired || json.ERRORS)) {
-        throw new StopError('The captcha is required.');
-      }
+      const json = await this._makeRequest(
+        `${this.url}vyp-request/${doc.t}?r=&_=${new Date().getTime()}`
+      );
       await this._waitForResponse(json.t, doc.i);
     } catch (err) {
-      this.logger.log('retryError', err, doc.i, '5');
+      this.logger.log('retryError', err, doc.i);
       throw err;
     }
   }
 
   async _waitForResponse(token, inn) {
-    const response = await fetch(
-      `${this.url}vyp-status/${token}?r=${new Date().getTime()}&_=${new Date().getTime()}`,
-      { agent: this.httpsAgent }
+    const json = await this._makeRequest(
+      `${this.url}vyp-status/${token}?r=${new Date().getTime()}&_=${new Date().getTime()}`
     );
-    const json = await response.json();
-
-    if (json && (json.captchaRequired || json.ERRORS)) {
-      throw new StopError('The captcha is required.');
-    }
-
     if (json.status === 'ready') await this._downloadFile(token, inn);
     else
-      await new Promise((resolve, reject) =>
+      await new Promise((resolve, reject) => {
         setTimeout(async () => {
           try {
             await this._waitForResponse(token, inn);
@@ -174,15 +157,18 @@ class Downloader {
           } catch (err) {
             reject(err);
           }
-        }, 1000)
-      );
+        }, 1000);
+      });
   }
 
   async _downloadFile(token, inn) {
     const response = await fetch(`${this.url}vyp-download/${token}`, { agent: this.httpsAgent });
-    const path = resolve(this.path, `${inn}.pdf`);
-    const writable = createWriteStream(path);
-    await streamPipeline(response.body, writable);
+    if (response.ok)
+      await streamPipeline(
+        response.body,
+        createWriteStream(resolve(this.outputPath, `${inn}.pdf`))
+      );
+    else throw new RequestError('Failed to download the document.');
     this.logger.log('success', `${inn}.pdf is downloaded.`);
   }
 
@@ -196,16 +182,8 @@ class Downloader {
     try {
       await this.throttle();
       const token = await this._sendForm(query, region);
-
-      if (!token) throw new RequestError(inn);
-
       const results = await this._getSearchResult(query, region, token);
-
-      if (!results) throw new RequestError(inn);
-      if (!results.length) throw new ValidationError('Invalid inn.');
-
-      // if (Math.random() > 0.3) throw new RequestError('my');
-
+      if (results && !results.length) throw new ValidationError('Invalid inn.');
       this.logger.log('success', `${results[0].i} Meta data is received.`);
       return results;
     } catch (err) {
@@ -222,17 +200,14 @@ class Downloader {
     try {
       await this.throttle();
       const token = await this._sendForm(query, region);
-      if (!token) return [];
       const results = await this._getSearchResult(query, region, token);
       if (results && !results.length) throw new ValidationError('Nothing was found.');
-      if (results)
-        results.map((item) => {
-          this.logger.log('success', `${item.i} Meta data is received.`);
-        });
-      return results || [];
+      results.map((item) => {
+        this.logger.log('success', `${item.i} Meta data is received.`);
+      });
+      return results;
     } catch (err) {
       if (err instanceof ValidationError) this.logger.log('validationError', err, query, region);
-      if (err instanceof StopError) throw err;
       return [];
     }
   }
@@ -258,7 +233,7 @@ class Downloader {
     return data.map((item) => this.convertMetaDataItem(item));
   }
 
-  async getMetaObject(params) {
+  async getMetaObjects(params) {
     const data = await this.getMetaData(params);
     return this.convertMetaData(data);
   }
@@ -269,15 +244,8 @@ class Downloader {
     try {
       await this.throttle();
       const token = await this._sendForm(query, region);
-
-      if (!token) throw new RequestError(inn);
-
       const results = await this._getSearchResult(query, region, token);
-
-      if (!results) throw new RequestError(inn);
-      if (!results.length) throw new ValidationError('Invalid inn.');
-      // if (Math.random() > 0.3) throw new RequestError('my');
-
+      if (results && !results.length) throw new ValidationError('Invalid inn.');
       await this._requestFile(results[0]);
       return inn;
     } catch (err) {
@@ -295,18 +263,13 @@ class Downloader {
     try {
       await this.throttle();
       const token = await this._sendForm(query, region);
-      if (!token) return;
       const results = await this._getSearchResult(query, region, token);
       if (results && !results.length) throw new ValidationError('Nothing was found.');
-      if (results) await Promise.allSettled(results.map((result) => this._requestFile(result)));
+      await Promise.allSettled(results.map((result) => this._requestFile(result)));
     } catch (err) {
       if (err instanceof ValidationError) this.logger.log('validationError', err, query, region);
-      if (err instanceof StopError) throw err;
     }
   }
 }
 
 module.exports = Downloader;
-
-// new Downloader().getMetaObject('колодцам').then(console.log);
-new Downloader().getDocs('колодцам').then(console.log).catch(console.log);

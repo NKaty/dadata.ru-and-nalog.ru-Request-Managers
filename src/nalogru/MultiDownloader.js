@@ -12,7 +12,7 @@ class MultiDownloader {
       });
     this.logger = options.logger || console;
     this.downloader = new Downloader({
-      path: options.path,
+      outputPath: options.outputPath,
       httpsAgent: this.httpsAgent,
       pause: options.pause,
       logger: this.logger,
@@ -32,18 +32,34 @@ class MultiDownloader {
     );
   }
 
-  async getDocs(queries) {
+  async getDocsByInn(queries) {
     const results = await Promise.allSettled(
       queries.map((query) => this.downloader.getDocByInn(query))
     );
     return this._processResults(results);
   }
 
-  async getMetaData(queries) {
+  async getMetaDataByInn(queries) {
     const results = await Promise.allSettled(
       queries.map((query) => this.downloader.getMetaDataByInn(query))
     );
     return this._processResults(results);
+  }
+
+  async getDocs(queries) {
+    await Promise.allSettled(queries.map((query) => this.downloader.getDocs(query)));
+  }
+
+  async getMetaData(queries) {
+    const results = await Promise.allSettled(
+      queries.map((query) => this.downloader.getMetaData(query))
+    );
+    return results
+      .reduce((acc, result) => {
+        if (result.status === 'fulfilled') acc.push(result.value);
+        return acc;
+      }, [])
+      .flat();
   }
 
   convertMetaDataItem(item) {
@@ -54,9 +70,9 @@ class MultiDownloader {
     return this.downloader.convertMetaData(data);
   }
 
-  async getMetaObject(queries) {
+  async getMetaObjects(queries) {
     const data = await this.getMetaData(queries);
-    return this.convertMetaData(data[0].flat());
+    return this.convertMetaData(data);
   }
 }
 
