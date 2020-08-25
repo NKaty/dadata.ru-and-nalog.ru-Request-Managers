@@ -5,7 +5,6 @@ const {
   existsSync,
   renameSync,
   mkdirSync,
-  rmdirSync,
   readdirSync,
   unlinkSync,
   writeFileSync,
@@ -13,7 +12,8 @@ const {
 } = require('fs');
 const { createInterface } = require('readline');
 const Database = require('better-sqlite3');
-const Logger = require('../common/Logger');
+const Logger = require('./Logger');
+const { getDate, cleanDir, closeStreams } = require('./helpers');
 
 class BaseRequestManagerDb {
   constructor(options = {}) {
@@ -48,6 +48,7 @@ class BaseRequestManagerDb {
     this._isStopErrorOccurred = false;
     this._stopErrorMessage = '';
     this.db = new Database(this.dbFile);
+    this._getDate = getDate;
     this.logger = new Logger(
       resolve(this._logsPath, `retryErrors_${this._getDate()}.log`),
       resolve(this._logsPath, `validationErrors_${this._getDate()}.log`),
@@ -81,26 +82,9 @@ class BaseRequestManagerDb {
     this.db.prepare('DELETE FROM requests').run();
   }
 
-  _getDate(pretty = false) {
-    const date = new Date();
-    const now = new Date(date.getTime() - date.getTimezoneOffset() * 60 * 1000).toISOString();
-    if (pretty) return now.substr(0, 19).split('T').join(' ');
-    return now.substr(0, 23);
-  }
-
-  _cleanDir(dir) {
-    const items = readdirSync(dir);
-    items.forEach((item) => {
-      const path = resolve(dir, item);
-      const stat = statSync(path);
-      if (stat.isFile()) unlinkSync(path);
-      else rmdirSync(path);
-    });
-  }
-
   _cleanBeforeStart() {
-    this._cleanDir(this._reportsPath);
-    this._cleanDir(this._logsPath);
+    cleanDir(this._reportsPath);
+    cleanDir(this._logsPath);
   }
 
   _insertRequest(inn) {
@@ -249,15 +233,7 @@ ${this._isStopErrorOccurred ? this._stopErrorMessage : ''}
 
   async _cleanBeforeFinish() {
     try {
-      const streamPromises = this._streams.map((stream) => {
-        if (stream) {
-          stream.end();
-          return new Promise((resolve) => stream.on('close', resolve));
-        }
-        return new Promise((resolve) => resolve());
-      });
-
-      await Promise.allSettled(streamPromises);
+      await closeStreams(this._streams);
       await this.logger.closeStreams();
     } catch (err) {
       console.log(err);

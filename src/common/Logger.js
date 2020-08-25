@@ -1,4 +1,5 @@
 const { createWriteStream } = require('fs');
+const { closeStreams } = require('./helpers');
 
 class Logger {
   constructor(
@@ -43,14 +44,7 @@ class Logger {
 
   async closeStreams() {
     try {
-      const streamPromises = Object.keys(this._steamTypes).map((stream) => {
-        if (this._steamTypes[stream]) {
-          this._steamTypes[stream].end();
-          return new Promise((resolve) => this._steamTypes[stream].on('close', resolve));
-        }
-        return new Promise((resolve) => resolve());
-      });
-      await Promise.allSettled(streamPromises);
+      await closeStreams(Object.values(this._steamTypes));
     } catch (err) {
       console.log(err);
     }

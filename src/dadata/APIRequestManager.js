@@ -5,7 +5,6 @@ const {
   existsSync,
   renameSync,
   mkdirSync,
-  rmdirSync,
   readdirSync,
   unlinkSync,
   readFileSync,
@@ -18,6 +17,7 @@ const { createInterface } = require('readline');
 const APIMultiCaller = require('./APIMultiCaller');
 const Logger = require('../common/Logger');
 const extractData = require('./extractData');
+const { getDate, cleanDir, closeStreams } = require('../common/helpers');
 
 class APIRequestManager {
   constructor(options) {
@@ -49,7 +49,7 @@ class APIRequestManager {
     this._tempErrorStream = null;
     this._validationErrorStream = null;
     this._tempInputStream = null;
-    this._successOutput = null;
+    this._successOutputStream = null;
     this.withBranches = options.withBranches || false;
     this.branchesCount = options.branchesCount || 20;
     this.requestsPerDay = options.requestsPerDay || 8000;
@@ -70,10 +70,10 @@ class APIRequestManager {
     this._validationErrorsNumber = 0;
     this._retryErrorsNumber = 0;
     this.logger = new Logger(
-      resolve(this._logsPath, `retryErrors_${this._getDate()}.log`),
-      resolve(this._logsPath, `validationErrors_${this._getDate()}.log`),
-      resolve(this._logsPath, `generalErrors_${this._getDate()}.log`),
-      resolve(this._logsPath, `success_${this._getDate()}.log`)
+      resolve(this._logsPath, `retryErrors_${getDate()}.log`),
+      resolve(this._logsPath, `validationErrors_${getDate()}.log`),
+      resolve(this._logsPath, `generalErrors_${getDate()}.log`),
+      resolve(this._logsPath, `success_${getDate()}.log`)
     );
     this.apiMultiCaller = new APIMultiCaller({ logger: this.logger });
     this.extractData = extractData;
@@ -90,30 +90,13 @@ class APIRequestManager {
     if (!existsSync(this._reportsPath)) mkdirSync(this._reportsPath);
   }
 
-  _getDate(pretty = false) {
-    const date = new Date();
-    const now = new Date(date.getTime() - date.getTimezoneOffset() * 60 * 1000).toISOString();
-    if (pretty) return now.substr(0, 19).split('T').join(' ');
-    return now.substr(0, 23);
-  }
-
-  _cleanDir(dir) {
-    const items = readdirSync(dir);
-    items.forEach((item) => {
-      const path = resolve(dir, item);
-      const stat = statSync(path);
-      if (stat.isFile()) unlinkSync(path);
-      else rmdirSync(path);
-    });
-  }
-
   _cleanBeforeStart() {
     if (existsSync(this._mainStatPath)) unlinkSync(this._mainStatPath);
     if (existsSync(this._mainValidationErrorsPath)) unlinkSync(this._mainValidationErrorsPath);
     if (existsSync(this._mainTempErrorsPath)) unlinkSync(this._mainTempErrorsPath);
 
-    this._cleanDir(this._logsPath);
-    this._cleanDir(this._tempInputPath);
+    cleanDir(this._logsPath);
+    cleanDir(this._tempInputPath);
   }
 
   async _processInput(checkingErrors) {
@@ -138,7 +121,7 @@ class APIRequestManager {
     let fileCount = 1;
 
     this._tempInputStream = createWriteStream(
-      resolve(this._tempInputPath, `${this._getDate()}_${fileCount}.txt`)
+      resolve(this._tempInputPath, `${getDate()}_${fileCount}.txt`)
     );
 
     for (const file of currentPaths) {
@@ -155,7 +138,7 @@ class APIRequestManager {
           this._tempInputStream.end();
           fileCount += 1;
           this._tempInputStream = createWriteStream(
-            resolve(this._tempInputPath, `${this._getDate()}_${fileCount}.txt`)
+            resolve(this._tempInputPath, `${getDate()}_${fileCount}.txt`)
           );
         }
         this._tempInputStream.write(`${line}\n`);
@@ -195,18 +178,18 @@ class APIRequestManager {
   _processResponse(response) {
     const json = JSON.stringify(this.extractData(response));
     if (this._firstJSON) {
-      this._successOutput.write(`\n${json}`);
+      this._successOutputStream.write(`\n${json}`);
       this._firstJSON = false;
     } else {
-      this._successOutput.write(`,\n${json}`);
+      this._successOutputStream.write(`,\n${json}`);
     }
   }
 
   async _request(currentPath) {
     this._firstJSON = true;
     const queriesArray = await this._getQueriesArray(currentPath);
-    const outputFileName = `${this._getDate()}.json`;
-    this._successOutput = createWriteStream(resolve(this._outputPath, outputFileName));
+    const outputFileName = `${getDate()}.json`;
+    this._successOutputStream = createWriteStream(resolve(this._outputPath, outputFileName));
     const successInn = [];
     let requestFailure = [];
     let validationFailure = [];
@@ -215,7 +198,7 @@ class APIRequestManager {
     let retryErrorsNumber = 0;
     let validationErrorsNumber = 0;
 
-    this._successOutput.write('[');
+    this._successOutputStream.write('[');
 
     for (const arr of queriesArray) {
       const response = await this.apiMultiCaller.makeRequests(arr);
@@ -230,9 +213,9 @@ class APIRequestManager {
       if (stopErrors.length || (failureRate > this.failureRate && this._repeatedFailure)) {
         this._stop = true;
         this._isStopErrorOccurred = !!stopErrors.length;
-        if (this._successOutput) {
-          this._successOutput.end();
-          await new Promise((resolve) => this._successOutput.on('close', resolve));
+        if (this._successOutputStream) {
+          this._successOutputStream.end();
+          await new Promise((resolve) => this._successOutputStream.on('close', resolve));
           existsSync(resolve(this._outputPath, outputFileName)) &&
             unlinkSync(resolve(this._outputPath, outputFileName));
           const errorMessage = stopErrors.length
@@ -261,7 +244,7 @@ class APIRequestManager {
       }
     }
 
-    this._successOutput.end('\n]\n');
+    this._successOutputStream.end('\n]\n');
 
     this._currentRequestNumber += currentRequestNumber;
     this._successNumber += successNumber;
@@ -363,7 +346,7 @@ ${
     ? 'Внимание. Рекомендуется проверить лимиты на количество запросов в день, секунду и на количество новых соединений в минуту.'
     : ''
 }
-Отчет сформирован: ${this._getDate(true)}`;
+Отчет сформирован: ${getDate(true)}`;
 
     writeFileSync(this._mainReportPath, report);
   }
@@ -371,7 +354,7 @@ ${
   _writeErrorsToRetry() {
     if (existsSync(this._mainTempErrorsPath)) {
       copyFileSync(this._mainTempErrorsPath, this._mainErrorsToRetryPath);
-      appendFileSync(this._mainErrorsToRetryPath, `Отчет сформирован: ${this._getDate(true)}`);
+      appendFileSync(this._mainErrorsToRetryPath, `Отчет сформирован: ${getDate(true)}`);
     } else {
       existsSync(this._mainErrorsToRetryPath) && unlinkSync(this._mainErrorsToRetryPath);
     }
@@ -379,7 +362,7 @@ ${
 
   async _writeDateToValidationErrors() {
     if (this._validationErrorStream) {
-      this._validationErrorStream.end(`Отчет сформирован: ${this._getDate(true)}\n\n`);
+      this._validationErrorStream.end(`Отчет сформирован: ${getDate(true)}\n\n`);
       await new Promise((resolve) => this._validationErrorStream.on('close', resolve));
     }
   }
@@ -398,21 +381,13 @@ ${
   async _cleanBeforeFinish() {
     const streams = [
       this._tempInputStream,
-      this._successOutput,
+      this._successOutputStream,
       this._tempErrorStream,
       this._validationErrorStream,
     ];
 
     try {
-      const streamPromises = streams.map((stream) => {
-        if (stream) {
-          stream.end();
-          return new Promise((resolve) => stream.on('close', resolve));
-        }
-        return new Promise((resolve) => resolve());
-      });
-
-      await Promise.allSettled(streamPromises);
+      await closeStreams(streams);
       await this.logger.closeStreams();
     } catch (err) {
       console.log(err);

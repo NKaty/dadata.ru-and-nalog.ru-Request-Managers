@@ -8,8 +8,12 @@ class RequestManagerDb extends BaseRequestManagerDb {
       throw new TypeError('You cannot instantiate RequestManagerDb class directly');
 
     super(options);
-    this._successOutput = null;
-    this._streams = [this._validationErrorStream, this._retryErrorStream, this._successOutput];
+    this._successOutputStream = null;
+    this._streams = [
+      this._validationErrorStream,
+      this._retryErrorStream,
+      this._successOutputStream,
+    ];
     this.cleanDB = options.cleanDB || false;
     this.updateMode = options.updateMode || true;
     this.innPerFile = options.innPerFile || 500;
@@ -60,34 +64,34 @@ class RequestManagerDb extends BaseRequestManagerDb {
   _writeJSONFiles(jsonSelect, getJSON) {
     let fileCount = 1;
     let lineCount = 0;
-    this._successOutput = createWriteStream(
+    this._successOutputStream = createWriteStream(
       resolve(this._outputPath, `${this._getDate()}_${fileCount}.json`)
     );
-    this._successOutput.write('[');
+    this._successOutputStream.write('[');
 
     for (const item of jsonSelect.iterate()) {
       if (lineCount === this.innPerFile) {
         lineCount = 0;
-        this._successOutput.end('\n]\n');
+        this._successOutputStream.end('\n]\n');
         fileCount += 1;
-        this._successOutput = createWriteStream(
+        this._successOutputStream = createWriteStream(
           resolve(this._outputPath, `${this._getDate()}_${fileCount}.json`)
         );
-        this._successOutput.write('[');
+        this._successOutputStream.write('[');
       }
       const json = getJSON(item);
       if (json !== undefined) {
         const items = JSON.parse(json);
         items.forEach((item, itemIndex) => {
           if (lineCount === 0 && itemIndex === 0)
-            this._successOutput.write(`\n${JSON.stringify(this._extractData(item))}`);
-          else this._successOutput.write(`,\n${JSON.stringify(this._extractData(item))}`);
+            this._successOutputStream.write(`\n${JSON.stringify(this._extractData(item))}`);
+          else this._successOutputStream.write(`,\n${JSON.stringify(this._extractData(item))}`);
         });
       }
       lineCount += 1;
     }
 
-    this._successOutput.end('\n]\n');
+    this._successOutputStream.end('\n]\n');
   }
 
   getCurrentResult() {
