@@ -32,6 +32,7 @@ class Logger {
 
   log(type, message, ...args) {
     try {
+      args = args.filter((item) => item.length);
       const info = args.length ? `${args.join(', ')} ` : '';
       const stream = this._getStream(type);
       if (message instanceof Error) console.log(`${info}${message.stack}`);
