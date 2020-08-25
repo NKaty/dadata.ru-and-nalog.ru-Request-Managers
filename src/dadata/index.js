@@ -1,4 +1,4 @@
-// const Manager = require('./Manager');
+// const Manager = require('./APIRequestManager');
 const Manager = require('./APIRequestManagerDb');
 
 const workingDir = process.argv[2];
