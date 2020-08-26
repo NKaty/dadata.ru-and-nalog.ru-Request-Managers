@@ -6,6 +6,7 @@ const { resolve } = require('path');
 const fetch = require('node-fetch');
 const ratelimit = require('promise-ratelimit');
 const { ValidationError, RequestError, StopError } = require('../common/customErrors');
+const { getDate } = require('../common/helpers');
 
 const streamPipeline = promisify(pipeline);
 
@@ -33,6 +34,7 @@ class Downloader {
       p: 'kpp',
       e: 'liquidation_date',
       v: 'invalidation_date',
+      k: 'type',
     };
   }
 
@@ -166,7 +168,7 @@ class Downloader {
     if (response.ok)
       await streamPipeline(
         response.body,
-        createWriteStream(resolve(this.outputPath, `${inn}.pdf`))
+        createWriteStream(resolve(this.outputPath, `${inn || getDate()}.pdf`))
       );
     else throw new RequestError('Failed to download the document.');
     this.logger.log('success', `${inn}.pdf is downloaded.`);
@@ -183,9 +185,9 @@ class Downloader {
       await this.throttle();
       const token = await this._sendForm(query, region);
       const results = await this._getSearchResult(query, region, token);
-      if (results && !results.length) throw new ValidationError('Invalid inn.');
+      if (results && (!results.length || !results[0].i)) throw new ValidationError('Invalid inn.');
       this.logger.log('success', `${results[0].i} Meta data is received.`);
-      return results;
+      return results.slice(0, 1);
     } catch (err) {
       if (err instanceof StopError) throw new StopError(inn);
       else if (err instanceof ValidationError) {
@@ -202,10 +204,12 @@ class Downloader {
       const token = await this._sendForm(query, region);
       const results = await this._getSearchResult(query, region, token);
       if (results && !results.length) throw new ValidationError('Nothing was found.');
-      results.map((item) => {
-        this.logger.log('success', `${item.i} Meta data is received.`);
+      return results.filter((item) => {
+        if (item.i) {
+          this.logger.log('success', `${item.i} Meta data is received.`);
+          return true;
+        }
       });
-      return results;
     } catch (err) {
       if (err instanceof ValidationError) this.logger.log('validationError', err, query, region);
       return [];
@@ -245,7 +249,7 @@ class Downloader {
       await this.throttle();
       const token = await this._sendForm(query, region);
       const results = await this._getSearchResult(query, region, token);
-      if (results && !results.length) throw new ValidationError('Invalid inn.');
+      if (results && (!results.length || !results[0].i)) throw new ValidationError('Invalid inn.');
       await this._requestFile(results[0]);
       return inn;
     } catch (err) {
@@ -265,7 +269,9 @@ class Downloader {
       const token = await this._sendForm(query, region);
       const results = await this._getSearchResult(query, region, token);
       if (results && !results.length) throw new ValidationError('Nothing was found.');
-      await Promise.allSettled(results.map((result) => this._requestFile(result)));
+      await Promise.allSettled(
+        results.filter((result) => !!result.i).map((result) => this._requestFile(result))
+      );
     } catch (err) {
       if (err instanceof ValidationError) this.logger.log('validationError', err, query, region);
     }
