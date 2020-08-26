@@ -1,3 +1,10 @@
+/**
+ * Downloader
+ * Downloads meta data and EGRUL pdf documents on companies.
+ * Can search by inn, ogrn, company name and region.
+ * If several companies are found for the query, they all will be downloaded.
+ **/
+
 const { createWriteStream } = require('fs');
 const { promisify } = require('util');
 const { pipeline } = require('stream');
@@ -12,6 +19,7 @@ const streamPipeline = promisify(pipeline);
 
 class Downloader {
   constructor(options = {}) {
+    // Output directory for pdf files
     this.outputPath = options.outputPath || resolve(process.cwd(), 'output');
     this.httpsAgent =
       options.httpsAgent ||
@@ -19,10 +27,12 @@ class Downloader {
         keepAlive: true,
         maxSockets: options.sockets || 1,
       });
+    // Pause between requests. Should be long enough not to cause 'Captcha is required' error
     this.pause = options.pause === null || options.pause === undefined ? 1500 : options.pause;
     this.throttle = ratelimit(this.pause);
     this.logger = options.logger || console;
     this.url = 'https://egrul.nalog.ru/';
+    // Meta data information on a company, that can be obtained from request when pdf document is downloading
     this.map = {
       g: 'management',
       n: 'full_name',
@@ -51,6 +61,7 @@ class Downloader {
     return json;
   }
 
+  // Sends search request
   async _sendForm(query, region, page = '') {
     const params = new URLSearchParams();
     params.append('vyp3CaptchaToken', '');
@@ -73,6 +84,7 @@ class Downloader {
     }
   }
 
+  // Gets search result, which includes companies meta data
   async _getSearchResult(query, region, token, page = '') {
     let json;
     let docs;
@@ -87,6 +99,7 @@ class Downloader {
     }
 
     try {
+      // If there is no search result yet, repeat request in 1 second
       if (json.status === 'wait') {
         docs = await new Promise((resolve, reject) =>
           setTimeout(async () => {
@@ -99,9 +112,12 @@ class Downloader {
           }, 1000)
         );
       } else {
+        // There is search result
         docs = json.rows;
+        // If we are on the first page, find out the number of pages
         if (docs.length && (page === '' || page === '1')) {
           const pages = Math.ceil(docs[0].cnt / docs.length);
+          // If the number of pages more than 1, get information from all other pages
           if (pages > 1) {
             const results = await Promise.allSettled(
               Array(pages - 1)
@@ -126,12 +142,14 @@ class Downloader {
     }
   }
 
+  // Gets specific page
   async _getPage(query, region, page) {
     await this.throttle();
     const token = await this._sendForm(query, region, page);
     return this._getSearchResult(query, region, token, page);
   }
 
+  // Sends request to download pdf file
   async _requestFile(doc) {
     try {
       await this.throttle();
@@ -145,11 +163,14 @@ class Downloader {
     }
   }
 
+  // Gets permission to download file
   async _waitForResponse(token, inn) {
     const json = await this._makeRequest(
       `${this.url}vyp-status/${token}?r=${new Date().getTime()}&_=${new Date().getTime()}`
     );
+    // If file is ready for download
     if (json.status === 'ready') await this._downloadFile(token, inn);
+    // Otherwise, check in 1 second
     else
       await new Promise((resolve, reject) => {
         setTimeout(async () => {
@@ -163,6 +184,7 @@ class Downloader {
       });
   }
 
+  // Downloads pdf file
   async _downloadFile(token, inn) {
     const response = await fetch(`${this.url}vyp-download/${token}`, { agent: this.httpsAgent });
     if (response.ok)
@@ -171,7 +193,7 @@ class Downloader {
         createWriteStream(resolve(this.outputPath, `${inn || getDate()}.pdf`))
       );
     else throw new RequestError('Failed to download the document.');
-    this.logger.log('success', `${inn}.pdf is downloaded.`);
+    this.logger.log('success', `${inn || getDate()}.pdf is downloaded.`);
   }
 
   _getRequestParams(params) {
@@ -179,6 +201,14 @@ class Downloader {
     else return [params.query, params.region];
   }
 
+  /**
+   * @desc Gets company meta data by its inn
+   * @param {string} inn - company inn to search
+   * @returns {Promise} - Promise object represents an array of meta data objects
+   * It is assumed, that only one company can be found,
+   * so length of the array of meta dada objects will be 1
+   * In case no company is found, validation error will be thrown
+   */
   async getMetaDataByInn(inn) {
     const [query, region] = this._getRequestParams(inn);
     try {
@@ -197,6 +227,12 @@ class Downloader {
     }
   }
 
+  /**
+   * @desc Gets meta data of the companies found by query parameters
+   * @param {(string|{query: string, region: string})} params - query parameters to search
+   * If params is a string, it will be treated as a query field (not a region field)
+   * @returns {Promise} - Promise object represents an array of meta dada objects
+   */
   async getMetaData(params) {
     const [query, region] = this._getRequestParams(params);
     try {
@@ -216,6 +252,11 @@ class Downloader {
     }
   }
 
+  /**
+   * @desc Converts company meta data according to map
+   * @param {Object} item - company meta data object to convert
+   * @returns {Object} - converted meta data object
+   */
   convertMetaDataItem(item) {
     return Object.keys(item).reduce((acc, field) => {
       if (field in this.map) {
@@ -233,15 +274,34 @@ class Downloader {
     }, {});
   }
 
+  /**
+   * @desc Converts meta data of the companies according to map
+   * @param {Array} data - array of meta data objects to convert
+   * @returns {Array} - array of converted meta data objects
+   */
   convertMetaData(data) {
     return data.map((item) => this.convertMetaDataItem(item));
   }
 
+  /**
+   * @desc Gets meta data of the companies by query parameters and convert it
+   * @param {(string|{query: string, region: string})} params - query parameters to search
+   * If params is a string, it will be treated as a query field (not a region field)
+   * @return {Promise} - Promise object represents an array of converted meta data objects
+   */
   async getMetaObjects(params) {
     const data = await this.getMetaData(params);
     return this.convertMetaData(data);
   }
 
+  /**
+   * @desc Gets EGRUL pdf document on the company by its inn
+   * @param {string} inn - company inn to search
+   * @returns {Promise} - Promise object represents company inn
+   * It is assumed, that only one company or none can be found,
+   * so only one pdf file or none will be downloaded
+   * In case no company is found, validation error will be thrown
+   */
   async getDocByInn(inn) {
     const [query, region] = this._getRequestParams(inn);
 
@@ -261,6 +321,12 @@ class Downloader {
     }
   }
 
+  /**
+   * @desc Gets EGRUL pdf documents on the companies found by query parameters
+   * @param {(string|{query: string, region: string})} params - query parameters to search
+   * If params is a string, it will be treated as a query field (not a region field)
+   * @returns {Promise}
+   */
   async getDocs(params) {
     const [query, region] = this._getRequestParams(params);
 
