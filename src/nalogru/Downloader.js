@@ -1,6 +1,6 @@
 /**
  * Downloader
- * Downloads meta data and EGRUL pdf documents on companies.
+ * Downloads meta data and EGRUL pdf documents on companies from nalog.ru website.
  * Can search by inn, ogrn, company name and region.
  * If several companies are found for the query, they all will be downloaded.
  **/

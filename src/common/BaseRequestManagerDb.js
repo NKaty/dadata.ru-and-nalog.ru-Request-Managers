@@ -1,3 +1,12 @@
+/**
+ * BaseRequestManagerDb
+ * Base request manager class manages multiples requests to nalog.ru website
+ * or dadata.ru api by using sqlite database.
+ * Uses only inn for search.
+ * Inns must be given in text files, where each line is a single inn.
+ * Offers reports on downloads after completion.
+ **/
+
 const { resolve } = require('path');
 const {
   createReadStream,
@@ -20,14 +29,23 @@ class BaseRequestManagerDb {
     if (new.target === BaseRequestManagerDb)
       throw new TypeError('You cannot instantiate BaseRequestManagerDb class directly');
 
+    // Directory with files to process. File names mustn't start with _
+    // Every file must be text file, where each line is a single inn
     this.inputDir = options.inputDir || 'input';
+    // Output directory for pdf files and json files
     this.outputDir = options.outputDir || 'output';
+    // Output directory for logs
     this.logsDir = options.logsDir || 'logs';
+    // Output directory for reports
     this.reportsDir = options.reportsDir || 'reports';
+    // Report with statistics on downloads
     this.reportFile = 'report.txt';
+    // List of inns, on which some network error occurred and they require re-request
     this.errorsToRetryFile = 'errorsToRetry.txt';
+    // List of invalid inns
     this.validationErrorsFile = 'validationErrors.txt';
     this.dbFile = options.dbFile || 'data.db';
+    // Directory, where all other directories and files will be created
     this.workingDir = options.workingDir || process.cwd();
     this._inputPath = resolve(this.workingDir, this.inputDir);
     this._outputPath = resolve(this.workingDir, this.outputDir);
@@ -39,10 +57,16 @@ class BaseRequestManagerDb {
     this._validationErrorStream = null;
     this._retryErrorStream = null;
     this._streams = [this._validationErrorStream, this._retryErrorStream];
+    // Number of requests simultaneously sent and processed
     this.requestsLength = options.requestsLength || 100;
+    // Failure rate to wait before making a next request if the failure rate was exceeded
+    // for the first time or stop making requests if the failure rate is exceeded more than once
     this.failureRate = options.failureRate || 0.5;
+    // Minimum number of requests sent simultaneously to check failure rate
     this.requestsLengthToCheckFailureRate = options.requestsLengthToCheckFailureRate || 5;
-    this.timeToWaitBeforeNextAttempt = options.timeToWaitBeforeNextAttempt || 0.2 * 60 * 1000;
+    // Time in milliseconds to wait before making a next request
+    // if the failure rate was exceeded for the first time
+    this.timeToWaitBeforeNextAttempt = options.timeToWaitBeforeNextAttempt || 30 * 60 * 1000;
     this._repeatedFailure = false;
     this._stop = false;
     this._isStopErrorOccurred = false;
@@ -68,6 +92,7 @@ class BaseRequestManagerDb {
   }
 
   _createDb() {
+    // Create table to keep status of requests
     this.db
       .prepare(
         `CREATE TABLE IF NOT EXISTS requests (
@@ -87,21 +112,30 @@ class BaseRequestManagerDb {
     cleanDir(this._logsPath);
   }
 
+  // Makes necessary checks and insert inn into into requests table
   _insertRequest(inn) {
     throw new Error('Must be implemented for sub classes.');
   }
 
+  // Gets inns to request into database
   async _processInput() {
+    // Read input directory and select files to process
     const inputPaths = readdirSync(this._inputPath).filter((file) => {
       const stat = statSync(resolve(this._inputPath, file));
+      // Select if it is a file and its name doesn't start with _
+      // If a file name starts with _, it means it is was processed before
       return stat.isFile() && file[0] !== '_';
     });
 
+    // If there are no files to process, go to make requests by inns (if there are unprocessed requests)
     if (!inputPaths.length) return;
 
+    // Clean requests table from old requests
     this._prepareDb();
+    // Clean reports and logs directory
     this._cleanBeforeStart();
 
+    // Process each file
     for (const file of inputPaths) {
       const currentPath = resolve(this._inputPath, file);
       const rl = createInterface({
@@ -110,9 +144,11 @@ class BaseRequestManagerDb {
       });
 
       for await (const line of rl) {
+        // Process each line (inn) and insert into request table
         this._insertRequest(line);
       }
 
+      // Mark each file as processed
       renameSync(currentPath, resolve(this._inputPath, `_${file}`));
     }
   }
@@ -121,6 +157,7 @@ class BaseRequestManagerDb {
     throw new Error('Must be implemented for sub classes.');
   }
 
+  // Updates status of every made request
   _updateAfterRequest(success, validationErrors, requestErrors, stopErrors) {
     const updateStatus = this.db.prepare('UPDATE requests SET status = ? WHERE inn = ?');
     success.forEach((item) => updateStatus.run('success', this._getSuccessItemInn(item)));
@@ -129,42 +166,50 @@ class BaseRequestManagerDb {
     stopErrors.forEach((item) => updateStatus.run('retry', item));
   }
 
+  // Makes batch of requests by passing them to multi downloader (api multi caller) class
   async _request(queries) {
     const response = await this._makeRequests(queries);
-    const success = response[0];
-    const requestErrors = response[1];
-    const stopErrors = response[2];
-    const validationErrors = response[3];
+    const [success, requestErrors, stopErrors, validationErrors] = response;
     const failureRate = requestErrors.length / (success.length + requestErrors.length);
     const failureRateExceeded =
       failureRate > this.failureRate && queries.length > this.requestsLengthToCheckFailureRate;
 
     this._updateAfterRequest(success, validationErrors, requestErrors, stopErrors);
 
+    // If stop error occurs or the failure rate is exceeded again, stop
     if (stopErrors.length || (failureRate > this.failureRate && this._repeatedFailure)) {
       this._stop = true;
       this._isStopErrorOccurred = !!stopErrors.length;
+      // If the failure rate is exceeded, mark it and
+      // wait before making a next request in case it is a short-term issue
     } else if (failureRateExceeded && !this._repeatedFailure) {
       this._repeatedFailure = true;
       await new Promise((resolve) => setTimeout(resolve, this.timeToWaitBeforeNextAttempt));
+      // Everything is ok
     } else {
       this._repeatedFailure = false;
     }
   }
 
+  // Gets inns to request
   _getQueryArray() {
     throw new Error('Must be implemented for sub classes.');
   }
 
+  // Splits requests into batches
   _getQueries(queryArray) {
     throw new Error('Must be implemented for sub classes.');
   }
 
+  // Manages request process
   async _requests() {
+    // Get inns to request
     const queryArray = this._getQueryArray();
 
     while (queryArray.length) {
+      // If stop error occurred or the failure rate is exceeded again, stop
       if (this._stop) return;
+      // Get a new batch of requests
       const queries = this._getQueries(queryArray);
       await this._request(queries);
     }
@@ -183,6 +228,10 @@ class BaseRequestManagerDb {
     };
   }
 
+  /**
+   * @desc Writes a report with statistics on downloads
+   * @returns {void}
+   */
   writeReport() {
     const stat = this._collectStat();
     const report = `Общее количество ИНН: ${stat.requests}
@@ -198,6 +247,11 @@ ${this._isStopErrorOccurred ? this._stopErrorMessage : ''}
     writeFileSync(this._mainReportPath, report);
   }
 
+  /**
+   * @desc Writes a file with a list of inns, on which some network error occurred
+   * and they require re-request, and a file with a list of invalid inns
+   * @returns {void}
+   */
   writeErrors() {
     const selectErrors = this.db.prepare('SELECT inn FROM requests WHERE status = ?');
     const validationErrors = selectErrors.raw().all('invalid').flat();
@@ -222,6 +276,10 @@ ${this._isStopErrorOccurred ? this._stopErrorMessage : ''}
     }
   }
 
+  /**
+   * @desc Writes a report with statistics on downloads and files with lists of inns with errors
+   * @returns {void}
+   */
   generateReport() {
     try {
       this.writeReport();
@@ -240,6 +298,10 @@ ${this._isStopErrorOccurred ? this._stopErrorMessage : ''}
     }
   }
 
+  /**
+   * @desc Launches the download process
+   * @returns {void}
+   */
   async start() {
     try {
       await this._processInput();
