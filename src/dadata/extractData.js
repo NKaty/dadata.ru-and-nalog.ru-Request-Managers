@@ -1,4 +1,12 @@
+// Extract the desired fields from a dadata object
+/**
+ * @desc Extracts the desired fields from a dadata object
+ * @param {Object} item - an object received from dadata.ru api
+ * @returns {Object} - an object with the desired fields
+ */
 module.exports = (item) => {
+  // If all the fields are needed, just
+  // return item.data;
   const data = item.data;
   return {
     full_name: data.name.full_with_opf,

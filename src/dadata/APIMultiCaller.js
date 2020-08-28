@@ -1,3 +1,13 @@
+/**
+ * APIMultiCaller
+ * Downloads information about companies and their branches from dadata.ru api.
+ * Accepts array of queries.
+ * Can search companies by inn, ogrn.
+ * Can get information only for a main company (without branches).
+ * Can search a specific branch of the company by kpp.
+ * For more information see https://dadata.ru/api/find-party/
+ **/
+
 const { Agent } = require('https');
 const PromiseThrottle = require('promise-throttle');
 const APICaller = require('./APICaller');
@@ -5,12 +15,14 @@ const { ValidationError, RequestError, StopError } = require('../common/customEr
 
 class APIMultiCaller {
   constructor(options = {}) {
+    // According to dadata.ru, maximum allowed number of new connections per minute is 60
     this.httpsAgent =
       options.httpsAgent ||
       new Agent({
         keepAlive: true,
         maxSockets: options.sockets || 30,
       });
+    // According to dadata.ru, maximum allowed number of requests per second is 20
     this.throttle = new PromiseThrottle({
       requestsPerSecond: options.requestsPerSecond || 17,
       promiseImplementation: Promise,
@@ -30,6 +42,13 @@ class APIMultiCaller {
     );
   }
 
+  /**
+   * @desc Gets information for the companies found by query parameters
+   * @param {Array.<(string|Object)>} queries - an array of query parameters to search
+   * If query parameter is a string, it will be treated as a query field
+   * @returns {Promise} - Promise object represents an array of arrays of inns
+   * or arrays of data objects, composed by status of result and type of errors
+   */
   async makeRequests(queries) {
     const requestArray = this._getRequestArray(queries);
     const results = await Promise.allSettled(requestArray);
@@ -43,6 +62,17 @@ class APIMultiCaller {
       },
       [[], [], [], []]
     );
+  }
+
+  /**
+   * @desc Gets information about the companies found by query parameters
+   * @param {Array.<(string|Object)>} queries - an array of query parameters to search
+   * If query parameter is a string, it will be treated as a query field
+   * @returns {Promise} - Promise object represents an array of data objects
+   */
+  async getDataObjects(queries) {
+    const results = await this.makeRequests(queries);
+    return results[0].flat();
   }
 }
 

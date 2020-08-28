@@ -1,3 +1,12 @@
+/**
+ * APICaller
+ * Downloads information about a company and its branches from dadata.ru api.
+ * Can search companies by inn, ogrn.
+ * Can get information only about a main company (without branches).
+ * Can search a specific branch of the company by kpp.
+ * For more information see https://dadata.ru/api/find-party/
+ **/
+
 const fetch = require('node-fetch');
 const dotenv = require('dotenv');
 const { ValidationError, RequestError, StopError } = require('../common/customErrors');
@@ -7,9 +16,11 @@ dotenv.config();
 class APICaller {
   constructor(options = {}) {
     this.url = 'https://suggestions.dadata.ru/suggestions/api/4_1/rs/findById/party';
+    // In order to make requests to dadata.ru api, token is required
     this.token = options.token || process.env.DADATA_API_KEY;
     this.httpsAgent = options.httpsAgent || null;
     this.logger = options.logger || console;
+    // Log success requests or not
     this.isSuccessLogging = options.isSuccessLogging || false;
     this.requestOptions = {
       method: 'POST',
@@ -24,9 +35,15 @@ class APICaller {
 
   _getRequestBody(query) {
     if (typeof query === 'string') return { query };
-    else return query;
+    return query;
   }
 
+  /**
+   * @desc Gets information about the company found by query parameters
+   * @param {(string|Object)} query - query parameters to search
+   * If params is a string, it will be treated as a query field
+   * @returns {Promise} - Promise object represents data object
+   */
   async makeRequest(query) {
     const requestBody = this._getRequestBody(query);
     const options = { ...this.requestOptions, body: JSON.stringify(requestBody) };
