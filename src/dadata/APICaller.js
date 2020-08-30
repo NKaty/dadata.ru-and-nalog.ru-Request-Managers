@@ -47,6 +47,7 @@ class APICaller {
   async makeRequest(query) {
     const requestBody = this._getRequestBody(query);
     const options = { ...this.requestOptions, body: JSON.stringify(requestBody) };
+    const info = requestBody.kpp ? `${requestBody.query} ${requestBody.kpp}` : requestBody.query;
 
     try {
       const response = await fetch(this.url, options);
@@ -78,14 +79,14 @@ class APICaller {
       return json.suggestions;
     } catch (err) {
       if (err instanceof ValidationError) {
-        this.logger.log('validationError', err, requestBody.query);
-        throw new ValidationError(requestBody.query);
+        this.logger.log('validationError', err, info);
+        throw new ValidationError(info);
       } else if (err instanceof StopError) {
-        this.logger.log('retryError', err, requestBody.query);
-        throw new StopError(requestBody.query);
+        this.logger.log('retryError', err, info);
+        throw new StopError(info);
       } else {
-        this.logger.log('retryError', err, requestBody.query);
-        throw new RequestError(requestBody.query);
+        this.logger.log('retryError', err, info);
+        throw new RequestError(info);
       }
     }
   }
