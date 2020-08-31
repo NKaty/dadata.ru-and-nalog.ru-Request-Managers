@@ -14,13 +14,22 @@ const { ValidationError, RequestError, StopError } = require('../common/customEr
 dotenv.config();
 
 class APICaller {
+  /**
+   * APICaller class
+   * @constructor
+   * @param {Object} [options] - configuration settings
+   * @param {string} [options.token] - dadata.ru token
+   * @param {https.Agent} [options.httpsAgent] - https agent to manage connections
+   * @param {Logger} [options.logger] - logger to log errors and success requests
+   * @param {boolean} [options.isSuccessLogging] - log successful requests or not
+   */
   constructor(options = {}) {
     this.url = 'https://suggestions.dadata.ru/suggestions/api/4_1/rs/findById/party';
     // In order to make requests to dadata.ru api, token is required
     this.token = options.token || process.env.DADATA_API_KEY;
     this.httpsAgent = options.httpsAgent || null;
     this.logger = options.logger || console;
-    // Log success requests or not
+    // Log successful requests or not
     this.isSuccessLogging = options.isSuccessLogging || false;
     this.requestOptions = {
       method: 'POST',

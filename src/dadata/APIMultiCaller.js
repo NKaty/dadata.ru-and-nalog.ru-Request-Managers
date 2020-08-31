@@ -14,6 +14,17 @@ const APICaller = require('./APICaller');
 const { ValidationError, RequestError, StopError } = require('../common/customErrors');
 
 class APIMultiCaller {
+  /**
+   * APIMultiCaller class
+   * @constructor
+   * @param {Object} [options] - configuration settings
+   * @param {string} [options.token] - dadata.ru token
+   * @param {number} [options.sockets] - maximum number of sockets to allow
+   * @param {number} [options.requestsPerSecond] - maximum number of requests per second
+   * @param {https.Agent} [options.httpsAgent] - https agent to manage connections
+   * @param {Logger} [options.logger] - logger to log errors and success requests
+   * @param {boolean} [options.isSuccessLogging] - log successful requests or not
+   */
   constructor(options = {}) {
     // According to dadata.ru, maximum allowed number of new connections per minute is 60
     this.httpsAgent =

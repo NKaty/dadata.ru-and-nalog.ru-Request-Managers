@@ -5,6 +5,8 @@
  * Collects json data into a database.
  * Uses only inn for search.
  * Inns must be given in text files, where each line is a single inn.
+ * Creates a directory structure on the first run, after which it is required
+ * to put the files with inns into input directory.
  * Offers reports on downloads after completion.
  * Writes json data to output files after successful completion.
  * If network errors occurred during execution and there are requests with status 'retry',
@@ -19,6 +21,28 @@ const { createWriteStream } = require('fs');
 const BaseRequestManagerDb = require('./BaseRequestManagerDb');
 
 class RequestManagerDb extends BaseRequestManagerDb {
+  /**
+   * RequestManagerDb class
+   * @constructor
+   * @param {Object} [options] - configuration settings
+   * @param {string} [options.inputDir] - name of directory with input files
+   * @param {string} [options.outputDir] - name of directory with output files
+   * @param {string} [options.logsDir] - name of directory with logs files
+   * @param {string} [options.reportsDir] - name of directory with reports
+   * @param {string} [options.dbFile] - name of sqlite database file
+   * @param {string} [options.workingDir] - path to directory where all other directories
+   *  and files will be created
+   * @param {number} [options.requestsLength] - number of requests simultaneously sent and processed
+   * @param {number} [options.failureRate] - failure rate of request to wait or stop
+   * @param {number} [options.requestsLengthToCheckFailureRate] - minimum number of requests sent
+   *  simultaneously to check failure rate
+   * @param {number} [options.timeToWaitBeforeNextAttempt] - time in milliseconds to wait
+   *  for the first time failure rate is exceeded
+   * @param {boolean} [options.cleanDB] - clean or not the table with json data
+   * @param {boolean} [options.updateMode] - update or not json data for inns if json data
+   *  for these inns already exist in db
+   * @param {number} [options.innPerFile] - number of json objects per output file
+   */
   constructor(options = {}) {
     if (new.target === RequestManagerDb)
       throw new TypeError('You cannot instantiate RequestManagerDb class directly');
@@ -32,8 +56,9 @@ class RequestManagerDb extends BaseRequestManagerDb {
     ];
     // Clean or not the table with json data before a new portion input files
     this.cleanDB = options.cleanDB || false;
-    // If the table with json data was not cleaned, update json data for
-    // repeating inns or just mark these inns as a success and do not make new requests
+    // If the table with json data was not cleaned and json data for certain inns already exist,
+    // update json data for these inns or just mark these inns as a success
+    // and do not make new requests
     this.updateMode = options.updateMode || true;
     // Number of json objects per output file
     this.innPerFile = options.innPerFile || 500;
@@ -162,7 +187,7 @@ class RequestManagerDb extends BaseRequestManagerDb {
 
   /**
    * @desc Launches the download process
-   * @returns {void}
+   * @returns {Promise} - Promise object represents void
    */
   async start() {
     try {

@@ -4,6 +4,8 @@
  * Uses inn for search or inn and kpp for searching a certain branch.
  * Inns must be given in text files, where each line is a single inn or
  * an inn and kpp separated by a space.
+ * Creates a directory structure on the first run, after which it is required
+ * to put the files with inns into input directory.
  * Offers reports on requests after completion.
  * Writes json data to output files.
  * Due to the limitation of the number of requests per day for free,
@@ -34,6 +36,30 @@ const extractData = require('./extractData');
 const { getDate, cleanDir, closeStreams } = require('../common/helpers');
 
 class APIRequestManager {
+  /**
+   * APIRequestManagerDb class
+   * @constructor
+   * @param {Object} [options] - configuration settings
+   * @param {string} [options.inputDir] - name of directory with input files
+   * @param {string} [options.outputDir] - name of directory with output files
+   * @param {string} [options.logsDir] - name of directory with logs files
+   * @param {string} [options.reportsDir] - name of directory with reports
+   * @param {string} [options.tempDir] - name of directory with with temporary files
+   *  required for the process to run
+   * @param {string} [options.workingDir] - path to directory where all other directories
+   *  and files will be created
+   * @param {number} [options.requestsPerDay] - number of requests per day
+   * @param {boolean} [options.withBranches] - also get information for branches or not
+   * @param {number} [options.branchesCount] - how many branches to get information for
+   * @param {number} [options.innPerFile] - number of inns per prepared file for requesting and
+   *  number of json objects per output file
+   * @param {number} [options.requestsLength] - number of requests simultaneously sent and processed
+   * @param {number} [options.failureRate] - failure rate of request to wait or stop
+   * @param {number} [options.requestsLengthToCheckFailureRate] - minimum number of requests sent
+   *  simultaneously to check failure rate
+   * @param {number} [options.timeToWaitBeforeNextAttempt] - time in milliseconds to wait
+   *  for the first time failure rate is exceeded
+   */
   constructor(options) {
     // Directory with files to process. File names mustn't start with _
     // Every file must be text file, where each line is a single inn
@@ -49,9 +75,9 @@ class APIRequestManager {
     // When all the inns and errors to retry are processed, the directory will be empty
     this.tempDir = options.tempDir || 'temp';
     // Directory with temporary files prepared for requesting
-    this.tempInputDir = options.tempInputDir || 'input';
+    this.tempInputDir = 'input';
     // Directory with a file of inns requiring re-request
-    this.tempErrorsDir = options.tempErrorsDir || 'errors';
+    this.tempErrorsDir = 'errors';
     // Auxiliary file with inns requiring re-request
     this.tempErrorsFile = 'errors.txt';
     // Report with statistics on requests
@@ -109,13 +135,16 @@ class APIRequestManager {
     this._successNumber = 0;
     this._validationErrorsNumber = 0;
     this._retryErrorsNumber = 0;
-    this.logger = new Logger(
-      resolve(this._logsPath, `retryErrors_${getDate()}.log`),
-      resolve(this._logsPath, `validationErrors_${getDate()}.log`),
-      resolve(this._logsPath, `generalErrors_${getDate()}.log`),
-      resolve(this._logsPath, `success_${getDate()}.log`)
-    );
+    this.logger = new Logger({
+      retryErrorPath: resolve(this._logsPath, `retryErrors_${getDate()}.log`),
+      validationErrorPath: resolve(this._logsPath, `validationErrors_${getDate()}.log`),
+      generalErrorPath: resolve(this._logsPath, `generalErrors_${getDate()}.log`),
+      successPath: resolve(this._logsPath, `success_${getDate()}.log`),
+    });
+    // Use instance of APIMultiCaller class to make requests
     this.apiMultiCaller = new APIMultiCaller({ logger: this.logger });
+    // Use extractData function to extract wanted data from dadata.ru object
+    // extractData function in extractData module can be changed according to your needs
     this.extractData = extractData;
     this._createDirStructure();
   }
@@ -496,7 +525,7 @@ ${
 
   /**
    * @desc Launches the request process
-   * @param {boolean} checkingErrors - process either input files or error files
+   * @param {boolean} [checkingErrors] - process either input files or error files
    * @returns {Promise} - Promise object represents void
    */
   async start(checkingErrors = false) {

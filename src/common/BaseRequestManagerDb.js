@@ -4,6 +4,8 @@
  * or dadata.ru api by using sqlite database.
  * Uses only inn for search.
  * Inns must be given in text files, where each line is a single inn.
+ * Creates a directory structure on the first run, after which it is required
+ * to put the files with inns into input directory.
  * Offers reports on downloads after completion.
  **/
 
@@ -25,6 +27,24 @@ const Logger = require('./Logger');
 const { getDate, cleanDir, closeStreams } = require('./helpers');
 
 class BaseRequestManagerDb {
+  /**
+   * BaseRequestManagerDb class
+   * @constructor
+   * @param {Object} [options] - configuration settings
+   * @param {string} [options.inputDir] - name of directory with input files
+   * @param {string} [options.outputDir] - name of directory with output files
+   * @param {string} [options.logsDir] - name of directory with logs files
+   * @param {string} [options.reportsDir] - name of directory with reports
+   * @param {string} [options.dbFile] - name of sqlite database file
+   * @param {string} [options.workingDir] - path to directory where all other directories
+   *  and files will be created
+   * @param {number} [options.requestsLength] - number of requests simultaneously sent and processed
+   * @param {number} [options.failureRate] - failure rate of request to wait or stop
+   * @param {number} [options.requestsLengthToCheckFailureRate] - minimum number of requests sent
+   *  simultaneously to check failure rate
+   * @param {number} [options.timeToWaitBeforeNextAttempt] - time in milliseconds to wait
+   *  for the first time failure rate is exceeded
+   */
   constructor(options = {}) {
     if (new.target === BaseRequestManagerDb)
       throw new TypeError('You cannot instantiate BaseRequestManagerDb class directly');
@@ -73,12 +93,12 @@ class BaseRequestManagerDb {
     this._stopErrorMessage = '';
     this.db = new Database(this.dbFile);
     this._getDate = getDate;
-    this.logger = new Logger(
-      resolve(this._logsPath, `retryErrors_${this._getDate()}.log`),
-      resolve(this._logsPath, `validationErrors_${this._getDate()}.log`),
-      resolve(this._logsPath, `generalErrors_${this._getDate()}.log`),
-      resolve(this._logsPath, `success_${this._getDate()}.log`)
-    );
+    this.logger = new Logger({
+      retryErrorPath: resolve(this._logsPath, `retryErrors_${this._getDate()}.log`),
+      validationErrorPath: resolve(this._logsPath, `validationErrors_${this._getDate()}.log`),
+      generalErrorPath: resolve(this._logsPath, `generalErrors_${this._getDate()}.log`),
+      successPath: resolve(this._logsPath, `success_${this._getDate()}.log`),
+    });
     this._makeRequests = null;
     this._createDirStructure();
     this._createDb();
@@ -300,7 +320,7 @@ ${this._isStopErrorOccurred ? this._stopErrorMessage : ''}
 
   /**
    * @desc Launches the download process
-   * @returns {void}
+   * @returns {Promise} - Promise object represents void
    */
   async start() {
     try {

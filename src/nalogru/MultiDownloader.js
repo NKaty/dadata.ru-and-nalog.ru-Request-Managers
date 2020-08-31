@@ -1,7 +1,7 @@
 /**
  * MultiDownloader
  * Downloads meta data and EGRUL pdf documents on companies from nalog.ru website.
- * Can accept an array of queries and search by inn, ogrn, company name and region.
+ * Accepts an array of queries and search by inn, ogrn, company name and region.
  * If several companies are found for the query, they all will be downloaded.
  **/
 
@@ -10,6 +10,16 @@ const Downloader = require('./Downloader');
 const { ValidationError, RequestError, StopError } = require('../common/customErrors');
 
 class MultiDownloader {
+  /**
+   * MultiDownloader class
+   * @constructor
+   * @param {Object} [options] - configuration settings
+   * @param {string} [options.outputPath] - path to download pdf files
+   * @param {number} [options.sockets] - maximum number of sockets to allow
+   * @param {number} [options.pause] - pause between requests in milliseconds
+   * @param {https.Agent} [options.httpsAgent] - https agent to manage connections
+   * @param {Logger} [options.logger] - logger to log errors and success requests
+   */
   constructor(options = {}) {
     this.httpsAgent =
       options.httpsAgent ||

@@ -7,20 +7,24 @@ const { createWriteStream } = require('fs');
 const { closeStreams } = require('./helpers');
 
 class Logger {
-  constructor(
-    retryErrorPath = null,
-    validationErrorPath = null,
-    generalErrorPath = null,
-    successPath = null,
-    mode = 'w'
-  ) {
-    // Flag, that indicates in what mode files should be opened for logging
-    this.mode = mode;
+  /**
+   * Logger class
+   * @constructor
+   * @param {Object} [options] - configuration settings
+   * @param {string} [options.mode] - flag, that indicates in what mode files
+   *  should be opened for logging
+   * @param {string} [options.retryErrorPath] - path to file to log network errors to retry
+   * @param {string} [options.validationErrorPath] - path to file to log validation errors
+   * @param {string} [options.generalErrorPath] - path to file to log general errors
+   * @param {string} [options.successPath] - path to file to log successful requests
+   */
+  constructor(options) {
+    this.mode = options.mode || 'w';
     this._pathTypes = {
-      retryError: retryErrorPath,
-      validationError: validationErrorPath,
-      generalError: generalErrorPath,
-      success: successPath,
+      retryError: options.retryErrorPath || null,
+      validationError: options.validationErrorPath || null,
+      generalError: options.generalErrorPath || null,
+      success: options.successPath || null,
     };
     this._steamTypes = {
       retryError: null,

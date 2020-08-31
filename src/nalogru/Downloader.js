@@ -18,6 +18,16 @@ const { getDate } = require('../common/helpers');
 const streamPipeline = promisify(pipeline);
 
 class Downloader {
+  /**
+   * Downloader class
+   * @constructor
+   * @param {Object} [options] - configuration settings
+   * @param {string} [options.outputPath] - path to download pdf files
+   * @param {number} [options.sockets] - maximum number of sockets to allow
+   * @param {number} [options.pause] - pause between requests in milliseconds
+   * @param {https.Agent} [options.httpsAgent] - https agent to manage connections
+   * @param {Logger} [options.logger] - logger to log errors and success requests
+   */
   constructor(options = {}) {
     // Output directory for pdf files
     this.outputPath = options.outputPath || resolve(process.cwd(), 'output');
@@ -27,7 +37,8 @@ class Downloader {
         keepAlive: true,
         maxSockets: options.sockets || 1,
       });
-    // Pause between requests. Should be long enough not to cause 'Captcha is required' error
+    // Pause between requests in milliseconds
+    // Should be long enough not to cause 'Captcha is required' error
     this.pause = options.pause === null || options.pause === undefined ? 1500 : options.pause;
     this.throttle = ratelimit(this.pause);
     this.logger = options.logger || console;
@@ -231,7 +242,7 @@ class Downloader {
    * @desc Gets meta data of the companies found by query parameters
    * @param {(string|{query: string, region: string})} params - query parameters to search
    * If params is a string, it will be treated as a query field (not a region field)
-   * @returns {Promise} - Promise object represents an array of meta dada objects
+   * @returns {Promise} - Promise object represents an array of meta data objects
    */
   async getMetaData(params) {
     const [query, region] = this._getRequestParams(params);
