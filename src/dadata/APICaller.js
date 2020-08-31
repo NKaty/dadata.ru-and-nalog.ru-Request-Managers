@@ -52,6 +52,9 @@ class APICaller {
    * @param {(string|Object)} query - query parameters to search
    * If params is a string, it will be treated as a query field
    * @returns {Promise} - Promise object represents data object
+   * @throws {ValidationError} - if an invalid request was made
+   * @throws {StopError} - if the rules of dadata.ru were violated
+   * @throws {RequestError} - if network errors occurred
    */
   async makeRequest(query) {
     const requestBody = this._getRequestBody(query);

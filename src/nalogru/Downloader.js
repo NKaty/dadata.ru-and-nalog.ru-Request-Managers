@@ -214,11 +214,13 @@ class Downloader {
 
   /**
    * @desc Gets company meta data by its inn
+   *  It is assumed, that only one company can be found,
+   *  so length of the array of meta dada objects will be 1
    * @param {string} inn - company inn to search
    * @returns {Promise} - Promise object represents an array of meta data objects
-   * It is assumed, that only one company can be found,
-   * so length of the array of meta dada objects will be 1
-   * In case no company is found, validation error will be thrown
+   * @throws {ValidationError} - if no company is found
+   * @throws {StopError} - if the time limitation of nalog.ru were violated
+   * @throws {RequestError} - if network errors occurred
    */
   async getMetaDataByInn(inn) {
     const [query, region] = this._getRequestParams(inn);
@@ -307,11 +309,13 @@ class Downloader {
 
   /**
    * @desc Gets EGRUL pdf document on the company by its inn
+   *  It is assumed, that only one company or none can be found,
+   *  so only one pdf file or none will be downloaded
    * @param {string} inn - company inn to search
    * @returns {Promise} - Promise object represents company inn
-   * It is assumed, that only one company or none can be found,
-   * so only one pdf file or none will be downloaded
-   * In case no company is found, validation error will be thrown
+   * @throws {ValidationError} - if no company is found
+   * @throws {StopError} - if the time limitation of nalog.ru were violated
+   * @throws {RequestError} - if network errors occurred
    */
   async getDocByInn(inn) {
     const [query, region] = this._getRequestParams(inn);
@@ -336,7 +340,7 @@ class Downloader {
    * @desc Gets EGRUL pdf documents on the companies found by query parameters
    * @param {(string|{query: string, region: string})} params - query parameters to search
    * If params is a string, it will be treated as a query field (not a region field)
-   * @returns {Promise}
+   * @returns {Promise} - Promise object represents void
    */
   async getDocs(params) {
     const [query, region] = this._getRequestParams(params);
