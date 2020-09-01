@@ -171,7 +171,9 @@ class RequestManagerDb extends BaseRequestManagerDb {
         .prepare('SELECT inn FROM requests WHERE status IN (?, ?)')
         .raw()
         .all('raw', 'retry')
-        .flat().length
+        .flat().length &&
+      this.db.prepare('SELECT inn FROM requests WHERE status = ?').raw().all('success').flat()
+        .length
     )
       this.getCurrentResult();
   }
