@@ -57,6 +57,7 @@ class Downloader {
       v: 'invalidation_date',
       k: 'type',
     };
+    this._searchPage = false;
   }
 
   async _makeRequest(url, options = { agent: this.httpsAgent }) {
@@ -126,7 +127,7 @@ class Downloader {
         // There is search result
         docs = json.rows;
         // If we are on the first page, find out the number of pages
-        if (docs.length && (page === '' || page === '1')) {
+        if (docs.length && !this._searchPage && (page === '' || page === '1')) {
           const pages = Math.ceil(docs[0].cnt / docs.length);
           // If the number of pages more than 1, get information from all other pages
           if (pages > 1) {
@@ -208,8 +209,11 @@ class Downloader {
   }
 
   _getRequestParams(params) {
-    if (typeof params === 'string') return [params, ''];
-    else return [params.query, params.region];
+    if (typeof params === 'string') return [params, '', ''];
+    else {
+      this._searchPage = !!params.page;
+      return [params.query, params.region || '', params.page || ''];
+    }
   }
 
   /**
@@ -242,16 +246,19 @@ class Downloader {
 
   /**
    * @desc Gets meta data of the companies found by query parameters
-   * @param {(string|{query: string, region: string})} params - query parameters to search
-   * If params is a string, it will be treated as a query field (not a region field)
+   * @param {(string|Object)} params - query parameters to search
+   * If params is a string, it will be treated as params.query
+   * @param {string} params.query - inn, ogrn or company name
+   * @param {string} [params.region] - a string of region codes separated by a comma - '5,12' or '10'
+   * @param {string} [params.page] - page number - '2' or '10'
    * @returns {Promise} - Promise object represents an array of meta data objects
    */
   async getMetaData(params) {
-    const [query, region] = this._getRequestParams(params);
+    const [query, region, page] = this._getRequestParams(params);
     try {
       await this.throttle();
-      const token = await this._sendForm(query, region);
-      const results = await this._getSearchResult(query, region, token);
+      const token = await this._sendForm(query, region, page);
+      const results = await this._getSearchResult(query, region, token, page);
       if (results && !results.length) throw new ValidationError('Nothing was found.');
       return results.filter((item) => {
         if (item.i) {
@@ -260,7 +267,8 @@ class Downloader {
         }
       });
     } catch (err) {
-      if (err instanceof ValidationError) this.logger.log('validationError', err, query, region);
+      if (err instanceof ValidationError)
+        this.logger.log('validationError', err, query, region, page);
       return [];
     }
   }
@@ -298,8 +306,11 @@ class Downloader {
 
   /**
    * @desc Gets meta data of the companies by query parameters and convert it
-   * @param {(string|{query: string, region: string})} params - query parameters to search
-   * If params is a string, it will be treated as a query field (not a region field)
+   * @param {(string|Object)} params - query parameters to search
+   * If params is a string, it will be treated as params.query
+   * @param {string} params.query - inn, ogrn or company name
+   * @param {string} [params.region] - a string of region codes separated by a comma - '5,12' or '10'
+   * @param {string} [params.page] - page number - '2' or '10'
    * @return {Promise} - Promise object represents an array of converted meta data objects
    */
   async getMetaObjects(params) {
@@ -338,23 +349,27 @@ class Downloader {
 
   /**
    * @desc Gets EGRUL pdf documents on the companies found by query parameters
-   * @param {(string|{query: string, region: string})} params - query parameters to search
-   * If params is a string, it will be treated as a query field (not a region field)
+   * @param {(string|Object)} params - query parameters to search
+   * If params is a string, it will be treated as params.query
+   * @param {string} params.query - inn, ogrn or company name
+   * @param {string} [params.region] - a string of region codes separated by a comma - '5,12' or '10'
+   * @param {string} [params.page] - page number - '2' or '10'
    * @returns {Promise} - Promise object represents void
    */
   async getDocs(params) {
-    const [query, region] = this._getRequestParams(params);
+    const [query, region, page] = this._getRequestParams(params);
 
     try {
       await this.throttle();
-      const token = await this._sendForm(query, region);
-      const results = await this._getSearchResult(query, region, token);
+      const token = await this._sendForm(query, region, page);
+      const results = await this._getSearchResult(query, region, token, page);
       if (results && !results.length) throw new ValidationError('Nothing was found.');
       await Promise.allSettled(
         results.filter((result) => !!result.i).map((result) => this._requestFile(result))
       );
     } catch (err) {
-      if (err instanceof ValidationError) this.logger.log('validationError', err, query, region);
+      if (err instanceof ValidationError)
+        this.logger.log('validationError', err, query, region, page);
     }
   }
 }

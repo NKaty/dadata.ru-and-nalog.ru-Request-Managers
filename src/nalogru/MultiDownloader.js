@@ -78,9 +78,12 @@ class MultiDownloader {
 
   /**
    * @desc Gets EGRUL pdf documents on the companies found by query parameters
-   * @param {Array.<(string|{query: string, region: string})>} queries - an array of query parameters to search
-   * If query parameter is a string, it will be treated as a query field (not a region field)
-   * @returns {Promise}
+   * @param {Array.<(string|Object)>} queries - an array of query parameters to search
+   * If query parameter is a string, it will be treated as queries[].query
+   * @param {string} queries[].query - inn, ogrn or company name
+   * @param {string} [queries[].region] - a string of region codes separated by a comma - '5,12' or '10'
+   * @param {string} [queries[].page] - page number - '2' or '10'
+   * @returns {Promise} - Promise object represents void
    */
   async getDocs(queries) {
     await Promise.allSettled(queries.map((query) => this.downloader.getDocs(query)));
@@ -88,8 +91,11 @@ class MultiDownloader {
 
   /**
    * @desc Gets meta data of the companies found by query parameters
-   * @param {Array.<(string|{query: string, region: string})>} queries - an array of query parameters to search
-   * If query parameter is a string, it will be treated as a query field (not a region field)
+   * @param {Array.<(string|Object)>} queries - an array of query parameters to search
+   * If query parameter is a string, it will be treated as queries[].query
+   * @param {string} queries[].query - inn, ogrn or company name
+   * @param {string} [queries[].region] - a string of region codes separated by a comma - '5,12' or '10'
+   * @param {string} [queries[].page] - page number - '2' or '10'
    * @returns {Promise} - Promise object represents an array of meta data objects
    */
   async getMetaData(queries) {
@@ -124,8 +130,11 @@ class MultiDownloader {
 
   /**
    * @desc Gets converted meta data of the companies found by query parameters
-   * @param {Array.<(string|{query: string, region: string})>} queries - an array of query parameters to search
-   * If query parameter is a string, it will be treated as a query field (not a region field)
+   * @param {Array.<(string|Object)>} queries - an array of query parameters to search
+   * If query parameter is a string, it will be treated as queries[].query
+   * @param {string} queries[].query - inn, ogrn or company name
+   * @param {string} [queries[].region] - a string of region codes separated by a comma - '5,12' or '10'
+   * @param {string} [queries[].page] - page number - '2' or '10'
    * @returns {Promise} - Promise object represents an array of converted meta data objects
    */
   async getMetaObjects(queries) {
