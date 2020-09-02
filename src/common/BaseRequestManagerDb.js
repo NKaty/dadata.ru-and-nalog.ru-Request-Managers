@@ -91,7 +91,7 @@ class BaseRequestManagerDb {
     this._stop = false;
     this._isStopErrorOccurred = false;
     this._stopErrorMessage = '';
-    this.db = new Database(this.dbFile);
+    this.db = new Database(resolve(this.workingDir, this.dbFile));
     this._getDate = getDate;
     this.logger = new Logger({
       retryErrorPath: resolve(this._logsPath, `retryErrors_${this._getDate()}.log`),
