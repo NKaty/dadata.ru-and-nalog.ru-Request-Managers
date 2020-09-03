@@ -13,12 +13,12 @@ class MultiDownloader {
   /**
    * MultiDownloader class
    * @constructor
-   * @param {Object} [options] - configuration settings
-   * @param {string} [options.outputPath] - path to download pdf files
-   * @param {number} [options.sockets] - maximum number of sockets to allow
-   * @param {number} [options.pause] - pause between requests in milliseconds
-   * @param {https.Agent} [options.httpsAgent] - https agent to manage connections
-   * @param {Logger} [options.logger] - logger to log errors and success requests
+   * @param {Object} [options={}] - configuration settings
+   * @param {string} [options.outputPath=resolve(process.cwd(), 'output')] - path to download pdf files
+   * @param {number} [options.sockets=1] - maximum number of sockets to allow
+   * @param {number} [options.pause=1500] - pause between requests in milliseconds
+   * @param {https.Agent} [options.httpsAgent=new Agent()] - https agent to manage connections
+   * @param {Logger} [options.logger=console] - logger to log errors and success requests
    */
   constructor(options = {}) {
     this.httpsAgent =

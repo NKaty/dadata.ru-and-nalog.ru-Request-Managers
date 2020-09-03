@@ -18,20 +18,20 @@ class PDFRequestManagerDb extends BaseRequestManagerDb {
   /**
    * PDFRequestManagerDb class
    * @constructor
-   * @param {Object} [options] - configuration settings
-   * @param {string} [options.inputDir] - name of directory with input files
-   * @param {string} [options.outputDir] - name of directory with output files
-   * @param {string} [options.logsDir] - name of directory with logs files
-   * @param {string} [options.reportsDir] - name of directory with reports
-   * @param {string} [options.dbFile] - name of sqlite database file
-   * @param {string} [options.workingDir] - path to directory where all other directories
-   *  and files will be created
-   * @param {number} [options.requestsLength] - number of requests simultaneously sent and processed
-   * @param {number} [options.failureRate] - failure rate of request to wait or stop
-   * @param {number} [options.requestsLengthToCheckFailureRate] - minimum number of requests sent
+   * @param {Object} [options={}] - configuration settings
+   * @param {string} [options.inputDir='input'] - name of directory with input files
+   * @param {string} [options.outputDir='output'] - name of directory with output files
+   * @param {string} [options.logsDir='logs'] - name of directory with logs files
+   * @param {string} [options.reportsDir='reports'] - name of directory with reports
+   * @param {string} [options.dbFile='data.db'] - name of sqlite database file
+   * @param {string} [options.workingDir=process.cwd()] - path to directory where
+   *  all other directories and files will be created
+   * @param {number} [options.requestsLength=100] - number of requests simultaneously sent and processed
+   * @param {number} [options.failureRate=0.5] - failure rate of request to wait or stop
+   * @param {number} [options.requestsLengthToCheckFailureRate=5] - minimum number of requests sent
    *  simultaneously to check failure rate
-   * @param {number} [options.timeToWaitBeforeNextAttempt] - time in milliseconds to wait
-   *  for the first time failure rate is exceeded
+   * @param {number} [options.timeToWaitBeforeNextAttempt=30 * 60 * 1000] - time in milliseconds
+   *  to wait for the first time failure rate is exceeded
    */
   constructor(options = {}) {
     super(options);

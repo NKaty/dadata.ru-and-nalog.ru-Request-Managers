@@ -17,13 +17,13 @@ class APIMultiCaller {
   /**
    * APIMultiCaller class
    * @constructor
-   * @param {Object} [options] - configuration settings
-   * @param {string} [options.token] - dadata.ru token
-   * @param {number} [options.sockets] - maximum number of sockets to allow
-   * @param {number} [options.requestsPerSecond] - maximum number of requests per second
-   * @param {https.Agent} [options.httpsAgent] - https agent to manage connections
-   * @param {Logger} [options.logger] - logger to log errors and success requests
-   * @param {boolean} [options.isSuccessLogging] - log successful requests or not
+   * @param {Object} [options={}] - configuration settings
+   * @param {string} [options.token=process.env.DADATA_API_KEY] - dadata.ru token
+   * @param {number} [options.sockets=30] - maximum number of sockets to allow
+   * @param {number} [options.requestsPerSecond=17] - maximum number of requests per second
+   * @param {https.Agent} [options.httpsAgent=new Agent()] - https agent to manage connections
+   * @param {Logger} [options.logger=console] - logger to log errors and success requests
+   * @param {boolean} [options.isSuccessLogging=false] - log successful requests or not
    */
   constructor(options = {}) {
     // According to dadata.ru, maximum allowed number of new connections per minute is 60

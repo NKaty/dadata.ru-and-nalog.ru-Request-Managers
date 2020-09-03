@@ -14,7 +14,7 @@
  * If some network errors cannot be fixed and so successful completion cannot be achieved,
  * the getCurrentResult method allows to write json data
  * for successful requests to output files at any time.
- **/
+ */
 
 const { resolve } = require('path');
 const { createWriteStream } = require('fs');
@@ -24,24 +24,24 @@ class RequestManagerDb extends BaseRequestManagerDb {
   /**
    * RequestManagerDb class
    * @constructor
-   * @param {Object} [options] - configuration settings
-   * @param {string} [options.inputDir] - name of directory with input files
-   * @param {string} [options.outputDir] - name of directory with output files
-   * @param {string} [options.logsDir] - name of directory with logs files
-   * @param {string} [options.reportsDir] - name of directory with reports
-   * @param {string} [options.dbFile] - name of sqlite database file
-   * @param {string} [options.workingDir] - path to directory where all other directories
-   *  and files will be created
-   * @param {number} [options.requestsLength] - number of requests simultaneously sent and processed
-   * @param {number} [options.failureRate] - failure rate of request to wait or stop
-   * @param {number} [options.requestsLengthToCheckFailureRate] - minimum number of requests sent
+   * @param {Object} [options={}] - configuration settings
+   * @param {string} [options.inputDir='input'] - name of directory with input files
+   * @param {string} [options.outputDir='output'] - name of directory with output files
+   * @param {string} [options.logsDir='logs'] - name of directory with logs files
+   * @param {string} [options.reportsDir='reports'] - name of directory with reports
+   * @param {string} [options.dbFile='data.db'] - name of sqlite database file
+   * @param {string} [options.workingDir=process.cwd()] - path to directory where
+   *  all other directories and files will be created
+   * @param {number} [options.requestsLength=100] - number of requests simultaneously sent and processed
+   * @param {number} [options.failureRate=0.5] - failure rate of request to wait or stop
+   * @param {number} [options.requestsLengthToCheckFailureRate=5] - minimum number of requests sent
    *  simultaneously to check failure rate
-   * @param {number} [options.timeToWaitBeforeNextAttempt] - time in milliseconds to wait
-   *  for the first time failure rate is exceeded
-   * @param {boolean} [options.cleanDB] - clean or not the table with json data
-   * @param {boolean} [options.updateMode] - update or not json data for inns if json data
+   * @param {number} [options.timeToWaitBeforeNextAttempt=30 * 60 * 1000] - time in milliseconds
+   *  to wait for the first time failure rate is exceeded
+   * @param {boolean} [options.cleanDB=false] - clean or not the table with json data
+   * @param {boolean} [options.updateMode=true] - update or not json data for inns if json data
    *  for these inns already exist in db
-   * @param {number} [options.innPerFile] - number of json objects per output file
+   * @param {number} [options.innPerFile=500] - number of json objects per output file
    */
   constructor(options = {}) {
     if (new.target === RequestManagerDb)
@@ -190,6 +190,7 @@ class RequestManagerDb extends BaseRequestManagerDb {
   /**
    * @desc Launches the download process
    * @returns {Promise} - Promise object represents void
+   * @override
    */
   async start() {
     try {

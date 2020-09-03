@@ -3,7 +3,7 @@ const { readdirSync, unlinkSync, statSync } = require('fs');
 
 /**
  * @desc Gets a current date object and convert it to a string
- * @param {boolean} pretty - defines the format of a date string
+ * @param {boolean} [pretty=false] - defines the format of a date string
  * @returns {string} - current date and time as a string
  */
 const getDate = (pretty = false) => {

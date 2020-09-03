@@ -17,11 +17,11 @@ class APICaller {
   /**
    * APICaller class
    * @constructor
-   * @param {Object} [options] - configuration settings
-   * @param {string} [options.token] - dadata.ru token
-   * @param {https.Agent} [options.httpsAgent] - https agent to manage connections
-   * @param {Logger} [options.logger] - logger to log errors and success requests
-   * @param {boolean} [options.isSuccessLogging] - log successful requests or not
+   * @param {Object} [options={}] - configuration settings
+   * @param {string} [options.token=process.env.DADATA_API_KEY] - dadata.ru token
+   * @param {?https.Agent} [options.httpsAgent=null] - https agent to manage connections
+   * @param {Logger} [options.logger=console] - logger to log errors and success requests
+   * @param {boolean} [options.isSuccessLogging=false] - log successful requests or not
    */
   constructor(options = {}) {
     this.url = 'https://suggestions.dadata.ru/suggestions/api/4_1/rs/findById/party';

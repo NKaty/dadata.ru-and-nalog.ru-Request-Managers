@@ -10,15 +10,15 @@ class Logger {
   /**
    * Logger class
    * @constructor
-   * @param {Object} [options] - configuration settings
-   * @param {string} [options.mode] - flag, that indicates in what mode files
+   * @param {Object} [options={}] - configuration settings
+   * @param {string} [options.mode='w] - flag, that indicates in what mode files
    *  should be opened for logging
-   * @param {string} [options.retryErrorPath] - path to file to log network errors to retry
-   * @param {string} [options.validationErrorPath] - path to file to log validation errors
-   * @param {string} [options.generalErrorPath] - path to file to log general errors
-   * @param {string} [options.successPath] - path to file to log successful requests
+   * @param {?string} [options.retryErrorPath=null] - path to file to log network errors to retry
+   * @param {?string} [options.validationErrorPath=null] - path to file to log validation errors
+   * @param {?string} [options.generalErrorPath=null] - path to file to log general errors
+   * @param {?string} [options.successPath=null] - path to file to log successful requests
    */
-  constructor(options) {
+  constructor(options = {}) {
     this.mode = options.mode || 'w';
     this._pathTypes = {
       retryError: options.retryErrorPath || null,
@@ -46,7 +46,7 @@ class Logger {
    * @desc Logs a message to a specific file depending on the message type
    * @param {string} type - message type
    * @param {(string|Error)} message - message to log
-   * @param {...(string|number)} args - additional information
+   * @param {...(string|number)} [args] - additional information
    * @returns {void}
    */
   log(type, message, ...args) {

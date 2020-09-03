@@ -12,7 +12,7 @@
  * it may take several days to restart the script depending on the total number of requests.
  * If network errors occurred during execution and there is errorsToRetry.txt in reports directory,
  * it is required to restart the script to repeat these requests when network problems are fixed.
- **/
+ */
 
 const { resolve } = require('path');
 const {
@@ -37,30 +37,30 @@ const { getDate, cleanDir, closeStreams } = require('../common/helpers');
 
 class APIRequestManager {
   /**
-   * APIRequestManagerDb class
+   * APIRequestManager class
    * @constructor
-   * @param {Object} [options] - configuration settings
-   * @param {string} [options.inputDir] - name of directory with input files
-   * @param {string} [options.outputDir] - name of directory with output files
-   * @param {string} [options.logsDir] - name of directory with logs files
-   * @param {string} [options.reportsDir] - name of directory with reports
-   * @param {string} [options.tempDir] - name of directory with with temporary files
+   * @param {Object} [options={}] - configuration settings
+   * @param {string} [options.inputDir='input'] - name of directory with input files
+   * @param {string} [options.outputDir='output'] - name of directory with output files
+   * @param {string} [options.logsDir='logs'] - name of directory with logs files
+   * @param {string} [options.reportsDir='reports'] - name of directory with reports
+   * @param {string} [options.tempDir='temp'] - name of directory with with temporary files
    *  required for the process to run
-   * @param {string} [options.workingDir] - path to directory where all other directories
-   *  and files will be created
-   * @param {number} [options.requestsPerDay] - number of requests per day
-   * @param {boolean} [options.withBranches] - also get information for branches or not
-   * @param {number} [options.branchesCount] - how many branches to get information for
-   * @param {number} [options.innPerFile] - number of inns per prepared file for requesting and
-   *  number of json objects per output file
-   * @param {number} [options.requestsLength] - number of requests simultaneously sent and processed
-   * @param {number} [options.failureRate] - failure rate of request to wait or stop
-   * @param {number} [options.requestsLengthToCheckFailureRate] - minimum number of requests sent
+   * @param {string} [options.workingDir=process.cwd()] - path to directory where
+   *  all other directories and files will be created
+   * @param {number} [options.requestsPerDay=8000] - number of requests per day
+   * @param {boolean} [options.withBranches=false] - also get information for branches or not
+   * @param {number} [options.branchesCount=20] - how many branches to get information for
+   * @param {number} [options.innPerFile=500] - number of inns per prepared file for requesting
+   *  and number of json objects per output file
+   * @param {number} [options.requestsLength=100] - number of requests simultaneously sent and processed
+   * @param {number} [options.failureRate=0.5] - failure rate of request to wait or stop
+   * @param {number} [options.requestsLengthToCheckFailureRate=5] - minimum number of requests sent
    *  simultaneously to check failure rate
-   * @param {number} [options.timeToWaitBeforeNextAttempt] - time in milliseconds to wait
-   *  for the first time failure rate is exceeded
+   * @param {number} [options.timeToWaitBeforeNextAttempt=30 * 60 * 1000] - time in milliseconds
+   *  to wait for the first time failure rate is exceeded
    */
-  constructor(options) {
+  constructor(options = {}) {
     // Directory with files to process. File names mustn't start with _
     // Every file must be text file, where each line is a single inn
     // or an inn and kpp separated by a space
@@ -525,7 +525,7 @@ ${
 
   /**
    * @desc Launches the request process
-   * @param {boolean} [checkingErrors] - process either input files or error files
+   * @param {boolean} [checkingErrors=false] - process either input files or error files
    * @returns {Promise} - Promise object represents void
    */
   async start(checkingErrors = false) {
