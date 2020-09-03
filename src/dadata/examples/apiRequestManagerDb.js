@@ -10,8 +10,10 @@ const manager = new Manager({ workingDir, dbFile: 'dadata.db' });
 // put files with inns there and run the script
 manager.start().catch(console.log);
 
-// If inns in input files more than 10000 (free of charge) and request process takes some days
-// and you want to write into output files json objects received so far
+// If for some reasons not all requests were successful or
+// a number of inns in input files are more than 10000 (free of charge),
+// so request process will take some days,
+// and if you want to write into output files json objects received so far
 // manager.getCurrentResult();
 
 // You have used the script several cycles (by putting new input files) and accumulated data

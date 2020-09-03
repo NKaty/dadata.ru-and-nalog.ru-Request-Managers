@@ -17,13 +17,15 @@ const logger = new Logger({
 const apiCaller = new APICaller({ logger, isSuccessLogging: true });
 
 // Queries is an array of objects and strings
+// Search for a company with inn 7707083893, get 5 branches
+// and for a company with ogrn 1173525034121
 apiCaller
   .getDataObjects([
     {
       query: '7707083893',
       count: 5,
     },
-    '1659096539',
+    '1173525034121',
   ])
   .then((data) => data.forEach((item) => console.log(extractData(item))))
   .catch((err) => logger.log('generalError', err));
