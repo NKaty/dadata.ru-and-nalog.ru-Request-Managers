@@ -1,9 +1,11 @@
 const { resolve } = require('path');
+const { existsSync, mkdirSync } = require('fs');
 
 const Logger = require('../../common/Logger');
 const Downloader = require('../Downloader');
 
 const logsDir = resolve(process.cwd(), 'logs');
+if (!existsSync(logsDir)) mkdirSync(logsDir);
 
 const logger = new Logger({
   retryErrorPath: resolve(logsDir, `retryErrors.log`),
@@ -12,10 +14,13 @@ const logger = new Logger({
   successPath: resolve(logsDir, `success.log`),
 });
 
-// If logger is not passed, console.log will be used
-const downloader = new Downloader({ logger });
+const outputPath = resolve(process.cwd(), 'output');
+if (!existsSync(outputPath)) mkdirSync(outputPath);
 
-// If param passing to getMetaObjects or getDocs methods is an object,
+// If logger is not passed, console.log will be used
+const downloader = new Downloader({ outputPath, logger });
+
+// If param passing to getMetadataObjects or getDocs methods is an object,
 // query property is required, region and page properties are optional
 // If param passing is a string, it is treated as query property
 

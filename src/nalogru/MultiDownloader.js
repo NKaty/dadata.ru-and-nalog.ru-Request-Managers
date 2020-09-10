@@ -14,7 +14,7 @@ class MultiDownloader {
    * MultiDownloader class
    * @constructor
    * @param {Object} [options={}] - configuration settings
-   * @param {string} [options.outputPath=resolve(process.cwd(), 'output')] - path to download pdf files
+   * @param {string} [options.outputPath=null] - path to download pdf files
    * @param {number} [options.sockets=1] - maximum number of sockets to allow
    * @param {number} [options.pause=1500] - pause between requests in milliseconds
    * @param {https.Agent} [options.httpsAgent=new Agent()] - https agent to manage connections
