@@ -1,5 +1,9 @@
 # Request Managers
-### Реализованы классы, позволяющие получать сведения об организациях путем обращения к dadata.ru api и к сайту nalog.ru.
+#### Реализованы классы, позволяющие получать сведения об организациях путем обращения к dadata.ru api и к сайту nalog.ru.
+Проект состоит из 3 директорий:
+- common - содержит базовые классы, logger и helpers 
+- dadata - содержит классы для обращения к dadata.ru API
+- nalogru - содержит классы для обращения к nalog.ru сайту
 ## dadata.ru API Классы
 #### APICaller
 Позволяет делать единичные запросы к api.
@@ -10,24 +14,25 @@ const APICaller = require('../APICaller');
 const extractData = require('../extractData');
 
 // If logger is not passed, console.log will be used
-const apiCaller = new APICaller();
+// You must have dadata.ru token
+const apiCaller = new APICaller({ token: 'your token here' });
 
 // Query as an object
 // Search for a company with inn 7707083893, get 5 branches
 apiCaller
- .makeRequest({
-   query: '7707083893',
-   count: 5,
- })
- .then((data) => data.forEach((item) => console.log(extractData(item))))
- .catch(console.log);
+  .makeRequest({
+    query: '7707083893',
+    count: 5,
+  })
+  .then((data) => data.forEach((item) => console.log(extractData(item))))
+  .catch(console.log);
 
 // Query as a string
 // Search for a company with ogrn 1173525034121
 apiCaller
- .makeRequest('1173525034121')
- .then((data) => data.forEach((item) => console.log(extractData(item))))
- .catch(console.log);
+  .makeRequest('1173525034121')
+  .then((data) => data.forEach((item) => console.log(extractData(item))))
+  .catch(console.log);
 ```
 #### APIMultiCaller
 Позволяет делать несколько параллельных запросов к api.
@@ -35,12 +40,14 @@ apiCaller
 [Примеры использования](src/dadata/examples/apiMultiCaller.js)
 ```javascript
 const { resolve } = require('path');
+const { existsSync, mkdirSync } = require('fs');
 
 const Logger = require('../../common/Logger');
 const APICaller = require('../APIMultiCaller');
 const extractData = require('../extractData');
 
 const logsDir = resolve(process.cwd(), 'logs');
+if (!existsSync(logsDir)) mkdirSync(logsDir);
 
 const logger = new Logger({
   retryErrorPath: resolve(logsDir, `retryErrors.log`),
@@ -50,7 +57,8 @@ const logger = new Logger({
 });
 
 // If logger is not passed, console.log will be used
-const apiCaller = new APICaller({ logger, isSuccessLogging: true });
+// You must have dadata.ru token
+const apiCaller = new APICaller({ logger, token: 'your token here', isSuccessLogging: true });
 
 // Queries is an array of objects and strings
 // Search for a company with inn 7707083893, get 5 branches
@@ -75,7 +83,8 @@ const Manager = require('../APIRequestManager');
 
 const workingDir = process.argv[2];
 
-const manager = new Manager({ workingDir });
+// You must have dadata.ru token
+const manager = new Manager({ workingDir, token: 'your token here' });
 
 // Run the script for the first time to create directory structure,
 // then put files with inns into input directory and run the script again
@@ -93,7 +102,8 @@ const Manager = require('../APIRequestManagerDb');
 
 const workingDir = process.argv[2];
 
-const manager = new Manager({ workingDir, dbFile: 'dadata.db' });
+// You must have dadata.ru token
+const manager = new Manager({ workingDir, token: 'your token here', dbFile: 'dadata.db' });
 
 // Run the script for the first time to create directory structure,
 // then put files with inns into input directory and run the script again
@@ -118,11 +128,13 @@ manager.getAllContent();
 [Примеры использования](src/nalogru/examples/downloader.js)
 ```javascript
 const { resolve } = require('path');
+const { existsSync, mkdirSync } = require('fs');
 
 const Logger = require('../../common/Logger');
 const Downloader = require('../Downloader');
 
 const logsDir = resolve(process.cwd(), 'logs');
+if (!existsSync(logsDir)) mkdirSync(logsDir);
 
 const logger = new Logger({
   retryErrorPath: resolve(logsDir, `retryErrors.log`),
@@ -131,10 +143,13 @@ const logger = new Logger({
   successPath: resolve(logsDir, `success.log`),
 });
 
-// If logger is not passed, console.log will be used
-const downloader = new Downloader({ logger });
+const outputPath = resolve(process.cwd(), 'output');
+if (!existsSync(outputPath)) mkdirSync(outputPath);
 
-// If param passing to getMetaObjects or getDocs methods is an object,
+// If logger is not passed, console.log will be used
+const downloader = new Downloader({ outputPath, logger });
+
+// If param passing to getMetadataObjects or getDocs methods is an object,
 // query property is required, region and page properties are optional
 // If param passing is a string, it is treated as query property
 
@@ -154,11 +169,13 @@ downloader.getDocs('1659096539').catch((err) => logger.log('generalError', err))
 [Примеры использования](src/nalogru/examples/multiDownloader.js)
 ```javascript
 const { resolve } = require('path');
+const { existsSync, mkdirSync } = require('fs');
 
 const Logger = require('../../common/Logger');
 const Downloader = require('../MultiDownloader');
 
 const logsDir = resolve(process.cwd(), 'logs');
+if (!existsSync(logsDir)) mkdirSync(logsDir);
 
 const logger = new Logger({
   retryErrorPath: resolve(logsDir, `retryErrors.log`),
@@ -167,10 +184,13 @@ const logger = new Logger({
   successPath: resolve(logsDir, `success.log`),
 });
 
-// If logger is not passed, console.log will be used
-const downloader = new Downloader({ logger });
+const outputPath = resolve(process.cwd(), 'output');
+if (!existsSync(outputPath)) mkdirSync(outputPath);
 
-// If param passing to getMetaObjects or getDocs methods is an object,
+// If logger is not passed, console.log will be used
+const downloader = new Downloader({ outputPath, logger });
+
+// If param passing to getMetadataObjects or getDocs methods is an object,
 // query property is required, region and page properties are optional
 // If param is a string, it is treated as query property
 
@@ -189,7 +209,7 @@ downloader
 #### MetadataRequestManagerDb
 Позволяет управлять процессом получения сведений об организациях по ИНН с помощью sqlite базы данных, в том числе читать ИНН из файлов, делать поиск, записывать полученные данные в json файлы, логировать ошибки и успешные запросы (с помощью класса Logger), получать отчеты о выполненных запросах.
 
-Так как получаемые сведения являются побочным продуктом процесса скачивания выписок из ЕГРЮЛ и ЕГРИП, объем сведений ограничен следующими полями: полное наименование, сокращенное наименование, адрес, ОГРН, дата получения ОГРН, ИНН, КПП, должность и имя руководителя, тип организации, дата ликвидации, дата признания недействительной.
+Так как получаемые сведения являются побочным продуктом процесса скачивания выписок из ЕГРЮЛ и ЕГРИП, объем сведений ограничен следующими полями: полное наименование, сокращенное наименование, адрес, ОГРН, дата получения ОГРН, ИНН, КПП, должность и имя руководителя, тип организации, дата ликвидации, дата признания организации недействительной.
 
 [Примеры использования](src/nalogru/examples/metadataRequestManagerDb.js)
 ```javascript
@@ -233,9 +253,9 @@ manager.start().catch(console.log);
 
 ## Установка
 1. Клонируйте репозиторий
-git clone
+git clone https://github.com/NKaty/dadata.ru-and-nalog.ru-Request-Managers.git managers
 2. Перейдите в директорию с проектом
-cd 
+cd managers
 3. Установите зависимости
 npm install
 
@@ -245,7 +265,7 @@ npm install
 | Param | Type | Default | Description |
 | --- | --- | --- | --- |
 | [options] | <code>Object</code> | <code>{}</code> | configuration settings |
-| [options.token] | <code>string</code> | <code>&quot;process.env.DADATA_API_KEY&quot;</code> | dadata.ru token |
+| [options.token] | <code>string</code> | <code>process.env.DADATA_API_KEY</code> | dadata.ru token |
 | [options.httpsAgent] | <code>https.Agent</code> | <code>null</code> | https agent to manage connections |
 | [options.logger] | <code>Logger</code> | <code>console</code> | logger to log errors and success requests |
 | [options.isSuccessLogging] | <code>boolean</code> | <code>false</code> | log successful requests or not |
@@ -269,7 +289,7 @@ Gets information about the company found by query parameters
 | Param | Type | Default | Description |
 | --- | --- | --- | --- |
 | [options] | <code>Object</code> | <code>{}</code> | configuration settings |
-| [options.token] | <code>string</code> | <code>&quot;process.env.DADATA_API_KEY&quot;</code> | dadata.ru token |
+| [options.token] | <code>string</code> | <code>process.env.DADATA_API_KEY</code> | dadata.ru token |
 | [options.sockets] | <code>number</code> | <code>30</code> | maximum number of sockets to allow |
 | [options.requestsPerSecond] | <code>number</code> | <code>17</code> | maximum number of requests per second |
 | [options.httpsAgent] | <code>https.Agent</code> | <code>new Agent()</code> | https agent to manage connections |
@@ -300,12 +320,12 @@ Gets information about the companies found by query parameters
 | Param | Type | Default | Description |
 | --- | --- | --- | --- |
 | [options] | <code>Object</code> | <code>{}</code> | configuration settings |
-| [options.inputDir] | <code>string</code> | <code>&quot;&#x27;input&#x27;&quot;</code> | name of directory with input files |
-| [options.outputDir] | <code>string</code> | <code>&quot;&#x27;output&#x27;&quot;</code> | name of directory with output files |
-| [options.logsDir] | <code>string</code> | <code>&quot;&#x27;logs&#x27;&quot;</code> | name of directory with logs files |
-| [options.reportsDir] | <code>string</code> | <code>&quot;&#x27;reports&#x27;&quot;</code> | name of directory with reports |
-| [options.tempDir] | <code>string</code> | <code>&quot;&#x27;temp&#x27;&quot;</code> | name of directory with with temporary files  required for the process to run |
-| [options.workingDir] | <code>string</code> | <code>&quot;process.cwd()&quot;</code> | path to directory where  all other directories and files will be created |
+| [options.inputDir] | <code>string</code> | <code>&quot;input&quot;</code> | name of directory with input files |
+| [options.outputDir] | <code>string</code> | <code>&quot;output&quot;</code> | name of directory with output files |
+| [options.logsDir] | <code>string</code> | <code>&quot;logs&quot;</code> | name of directory with logs files |
+| [options.reportsDir] | <code>string</code> | <code>&quot;reports&quot;</code> | name of directory with reports |
+| [options.tempDir] | <code>string</code> | <code>&quot;temp&quot;</code> | name of directory with with temporary files  required for the process to run |
+| [options.workingDir] | <code>string</code> | <code>process.cwd()</code> | path to directory where  all other directories and files will be created |
 | [options.requestsPerDay] | <code>number</code> | <code>8000</code> | number of requests per day |
 | [options.withBranches] | <code>boolean</code> | <code>false</code> | also get information for branches or not |
 | [options.branchesCount] | <code>number</code> | <code>20</code> | how many branches to get information for |
@@ -325,16 +345,16 @@ Launches the request process
 | [checkingErrors] | <code>boolean</code> | <code>false</code> | process either input files or error files |
 
 ### Class: APIRequestManagerDb
-### new APIRequestManagerDb([options])
+#### new APIRequestManagerDb([options])
 | Param | Type | Default | Description |
 | --- | --- | --- | --- |
 | [options] | <code>Object</code> | <code>{}</code> | configuration settings |
-| [options.inputDir] | <code>string</code> | <code>&quot;&#x27;input&#x27;&quot;</code> | name of directory with input files |
-| [options.outputDir] | <code>string</code> | <code>&quot;&#x27;output&#x27;&quot;</code> | name of directory with output files |
-| [options.logsDir] | <code>string</code> | <code>&quot;&#x27;logs&#x27;&quot;</code> | name of directory with logs files |
-| [options.reportsDir] | <code>string</code> | <code>&quot;&#x27;reports&#x27;&quot;</code> | name of directory with reports |
-| [options.dbFile] | <code>string</code> | <code>&quot;&#x27;data.db&#x27;&quot;</code> | name of sqlite database file |
-| [options.workingDir] | <code>string</code> | <code>&quot;process.cwd()&quot;</code> | path to directory where  all other directories and files will be created * @param {number} [options.requestsLength=100] - number of requests simultaneously sent and processed |
+| [options.inputDir] | <code>string</code> | <code>&quot;input&quot;</code> | name of directory with input files |
+| [options.outputDir] | <code>string</code> | <code>&quot;output&quot;</code> | name of directory with output files |
+| [options.logsDir] | <code>string</code> | <code>&quot;logs&quot;</code> | name of directory with logs files |
+| [options.reportsDir] | <code>string</code> | <code>&quot;reports&quot;</code> | name of directory with reports |
+| [options.dbFile] | <code>string</code> | <code>&quot;data.db&quot;</code> | name of sqlite database file |
+| [options.workingDir] | <code>string</code> | <code>process.cwd()</code> | path to directory where  all other directories and files will be created * @param {number} [options.requestsLength=100] - number of requests simultaneously sent and processed |
 | [options.failureRate] | <code>number</code> | <code>0.5</code> | failure rate of request to wait or stop |
 | [options.requestsLengthToCheckFailureRate] | <code>number</code> | <code>5</code> | minimum number of requests sent  simultaneously to check failure rate |
 | [options.timeToWaitBeforeNextAttempt] | <code>number</code> | <code>30 * 60 * 1000</code> | time in milliseconds  to wait for the first time failure rate is exceeded |
@@ -371,7 +391,7 @@ Launches the download process
 | Param | Type | Default | Description |
 | --- | --- | --- | --- |
 | [options] | <code>Object</code> | <code>{}</code> | configuration settings |
-| [options.outputPath] | <code>string</code> | <code>&quot;resolve(process.cwd(), &#x27;output&#x27;)&quot;</code> | path to download pdf files |
+| [options.outputPath] | <code>string</code> | <code>null</code> | path to download pdf files |
 | [options.sockets] | <code>number</code> | <code>1</code> | maximum number of sockets to allow |
 | [options.pause] | <code>number</code> | <code>1500</code> | pause between requests in milliseconds |
 | [options.httpsAgent] | <code>https.Agent</code> | <code>new Agent()</code> | https agent to manage connections |
@@ -423,7 +443,7 @@ Converts metadata of the companies according to map
 | --- | --- | --- |
 | data | <code>Array</code> | array of metadata objects to convert |
 
-#### downloader.getMetaObjects(params) ⇒ <code>Promise</code>
+#### downloader.getMetadataObjects(params) ⇒ <code>Promise</code>
 Gets metadata of the companies by query parameters and convert it
 
 **Returns**: <code>Promise</code> - Promise object represents an array of converted metadata objects  
@@ -462,11 +482,11 @@ Gets EGRUL pdf documents on the companies found by query parameters
 | [params.page] | <code>string</code> | page number - '2' or '10' |
 
 ### Class: MultiDownloader
-### new MultiDownloader([options])
+#### new MultiDownloader([options])
 | Param | Type | Default | Description |
 | --- | --- | --- | --- |
 | [options] | <code>Object</code> | <code>{}</code> | configuration settings |
-| [options.outputPath] | <code>string</code> | <code>&quot;resolve(process.cwd(), &#x27;output&#x27;)&quot;</code> | path to download pdf files |
+| [options.outputPath] | <code>string</code> | <code>null</code> | path to download pdf files |
 | [options.sockets] | <code>number</code> | <code>1</code> | maximum number of sockets to allow |
 | [options.pause] | <code>number</code> | <code>1500</code> | pause between requests in milliseconds |
 | [options.httpsAgent] | <code>https.Agent</code> | <code>new Agent()</code> | https agent to manage connections |
@@ -534,7 +554,7 @@ Converts metadata of the companies according to map
 | --- | --- | --- |
 | data | <code>Array</code> | array of metadata objects to convert |
 
-### multiDownloader.getMetaObjects(queries) ⇒ <code>Promise</code>
+### multiDownloader.getMetadataObjects(queries) ⇒ <code>Promise</code>
 Gets converted metadata of the companies found by query parameters
 
 **Returns**: <code>Promise</code> - Promise object represents an array of converted metadata objects  
@@ -551,12 +571,12 @@ Gets converted metadata of the companies found by query parameters
 | Param | Type | Default | Description |
 | --- | --- | --- | --- |
 | [options] | <code>Object</code> | <code>{}</code> | configuration settings |
-| [options.inputDir] | <code>string</code> | <code>&quot;&#x27;input&#x27;&quot;</code> | name of directory with input files |
-| [options.outputDir] | <code>string</code> | <code>&quot;&#x27;output&#x27;&quot;</code> | name of directory with output files |
-| [options.logsDir] | <code>string</code> | <code>&quot;&#x27;logs&#x27;&quot;</code> | name of directory with logs files |
-| [options.reportsDir] | <code>string</code> | <code>&quot;&#x27;reports&#x27;&quot;</code> | name of directory with reports |
-| [options.dbFile] | <code>string</code> | <code>&quot;&#x27;data.db&#x27;&quot;</code> | name of sqlite database file |
-| [options.workingDir] | <code>string</code> | <code>&quot;process.cwd()&quot;</code> | path to directory where  all other directories and files will be created |
+| [options.inputDir] | <code>string</code> | <code>&quot;input&quot;</code> | name of directory with input files |
+| [options.outputDir] | <code>string</code> | <code>&quot;output&quot;</code> | name of directory with output files |
+| [options.logsDir] | <code>string</code> | <code>&quot;logs&quot;</code> | name of directory with logs files |
+| [options.reportsDir] | <code>string</code> | <code>&quot;reports&quot;</code> | name of directory with reports |
+| [options.dbFile] | <code>string</code> | <code>&quot;data.db&quot;</code> | name of sqlite database file |
+| [options.workingDir] | <code>string</code> | <code>process.cwd()</code> | path to directory where  all other directories and files will be created |
 | [options.requestsLength] | <code>number</code> | <code>100</code> | number of requests simultaneously sent and processed |
 | [options.failureRate] | <code>number</code> | <code>0.5</code> | failure rate of request to wait or stop |
 | [options.requestsLengthToCheckFailureRate] | <code>number</code> | <code>5</code> | minimum number of requests sent  simultaneously to check failure rate |
@@ -591,12 +611,12 @@ Launches the download process
 | Param | Type | Default | Description |
 | --- | --- | --- | --- |
 | [options] | <code>Object</code> | <code>{}</code> | configuration settings |
-| [options.inputDir] | <code>string</code> | <code>&quot;&#x27;input&#x27;&quot;</code> | name of directory with input files |
-| [options.outputDir] | <code>string</code> | <code>&quot;&#x27;output&#x27;&quot;</code> | name of directory with output files |
-| [options.logsDir] | <code>string</code> | <code>&quot;&#x27;logs&#x27;&quot;</code> | name of directory with logs files |
-| [options.reportsDir] | <code>string</code> | <code>&quot;&#x27;reports&#x27;&quot;</code> | name of directory with reports |
-| [options.dbFile] | <code>string</code> | <code>&quot;&#x27;data.db&#x27;&quot;</code> | name of sqlite database file |
-| [options.workingDir] | <code>string</code> | <code>&quot;process.cwd()&quot;</code> | path to directory where  all other directories and files will be created |
+| [options.inputDir] | <code>string</code> | <code>&quot;input&quot;</code> | name of directory with input files |
+| [options.outputDir] | <code>string</code> | <code>&quot;output&quot;</code> | name of directory with output files |
+| [options.logsDir] | <code>string</code> | <code>&quot;logs&quot;</code> | name of directory with logs files |
+| [options.reportsDir] | <code>string</code> | <code>&quot;reports&quot;</code> | name of directory with reports |
+| [options.dbFile] | <code>string</code> | <code>&quot;data.db&quot;</code> | name of sqlite database file |
+| [options.workingDir] | <code>string</code> | <code>process.cwd()</code> | path to directory where  all other directories and files will be created |
 | [options.requestsLength] | <code>number</code> | <code>100</code> | number of requests simultaneously sent and processed |
 | [options.failureRate] | <code>number</code> | <code>0.5</code> | failure rate of request to wait or stop |
 | [options.requestsLengthToCheckFailureRate] | <code>number</code> | <code>5</code> | minimum number of requests sent  simultaneously to check failure rate |
@@ -621,7 +641,7 @@ Launches the download process
 | Param | Type | Default | Description |
 | --- | --- | --- | --- |
 | [options] | <code>Object</code> | <code>{}</code> | configuration settings |
-| [options.mode] | <code>string</code> | <code>&quot;&#x27;w&quot;</code> | flag, that indicates in what mode files  should be opened for logging |
+| [options.mode] | <code>string</code> | <code>&quot;w&quot;</code> | flag, that indicates in what mode files  should be opened for logging |
 | [options.retryErrorPath] | <code>string</code> | <code>null</code> | path to file to log network errors to retry |
 | [options.validationErrorPath] | <code>string</code> | <code>null</code> | path to file to log validation errors |
 | [options.generalErrorPath] | <code>string</code> | <code>null</code> | path to file to log general errors |

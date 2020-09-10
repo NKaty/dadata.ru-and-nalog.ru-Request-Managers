@@ -11,7 +11,7 @@ class Logger {
    * Logger class
    * @constructor
    * @param {Object} [options={}] - configuration settings
-   * @param {string} [options.mode='w] - flag, that indicates in what mode files
+   * @param {string} [options.mode='w'] - flag, that indicates in what mode files
    *  should be opened for logging
    * @param {?string} [options.retryErrorPath=null] - path to file to log network errors to retry
    * @param {?string} [options.validationErrorPath=null] - path to file to log validation errors
