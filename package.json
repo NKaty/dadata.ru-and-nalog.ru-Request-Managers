@@ -1,8 +1,12 @@
 {
-  "name": "egrul",
+  "name": "request-managers",
   "version": "1.0.0",
-  "description": "Request managers",
+  "description": "Request managers for making requests to dadata.ru API and nalog.ru website",
   "main": "index.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/NKaty/dadata.ru-and-nalog.ru-Request-Managers.git"
+  },
   "author": "NKaty",
   "license": "ISC",
   "devDependencies": {
