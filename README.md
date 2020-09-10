@@ -615,3 +615,28 @@ Writes a report with statistics on downloads and files with lists of inns with e
 Launches the download process
 
 **Returns**: <code>Promise</code> - Promise object represents void  
+
+### Class: Logger
+#### new Logger([options])
+| Param | Type | Default | Description |
+| --- | --- | --- | --- |
+| [options] | <code>Object</code> | <code>{}</code> | configuration settings |
+| [options.mode] | <code>string</code> | <code>&quot;&#x27;w&quot;</code> | flag, that indicates in what mode files  should be opened for logging |
+| [options.retryErrorPath] | <code>string</code> | <code>null</code> | path to file to log network errors to retry |
+| [options.validationErrorPath] | <code>string</code> | <code>null</code> | path to file to log validation errors |
+| [options.generalErrorPath] | <code>string</code> | <code>null</code> | path to file to log general errors |
+| [options.successPath] | <code>string</code> | <code>null</code> | path to file to log successful requests |
+
+#### logger.log(type, message, [...args]) ⇒ <code>void</code>
+Logs a message to a specific file depending on the message type
+
+| Param | Type | Description |
+| --- | --- | --- |
+| type | <code>string</code> | message type |
+| message | <code>string</code>&#124;<code>Error</code> | message to log |
+| [...args] | <code>string</code>&#124;<code>number</code> | additional information |
+
+#### logger.closeStreams() ⇒ <code>Promise</code>
+Closes message streams
+ 
+**Returns**: <code>Promise</code> - Promise object represents void  
