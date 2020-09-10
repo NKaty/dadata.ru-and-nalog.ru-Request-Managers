@@ -4,7 +4,7 @@
 - common - содержит базовые классы, logger и helpers 
 - dadata - содержит классы для обращения к dadata.ru API
 - nalogru - содержит классы для обращения к nalog.ru сайту
-## dadata.ru API Классы
+## dadata.ru Классы
 #### APICaller
 Позволяет делать единичные запросы к api.
 
@@ -253,11 +253,14 @@ manager.start().catch(console.log);
 
 ## Установка
 1. Клонируйте репозиторий
-git clone https://github.com/NKaty/dadata.ru-and-nalog.ru-Request-Managers.git managers
+
+    ```git clone https://github.com/NKaty/dadata.ru-and-nalog.ru-Request-Managers.git managers```
 2. Перейдите в директорию с проектом
-cd managers
+
+    ```cd managers```
 3. Установите зависимости
-npm install
+
+    ```npm install```
 
 ## API
 ### Class: APICaller
