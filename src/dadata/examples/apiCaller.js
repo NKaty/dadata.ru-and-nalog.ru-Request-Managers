@@ -2,7 +2,8 @@ const APICaller = require('../APICaller');
 const extractData = require('../extractData');
 
 // If logger is not passed, console.log will be used
-const apiCaller = new APICaller();
+// You must have dadata.ru token
+const apiCaller = new APICaller({ token: 'your token here' });
 
 // Query as an object
 // Search for a company with inn 7707083893, get 5 branches
