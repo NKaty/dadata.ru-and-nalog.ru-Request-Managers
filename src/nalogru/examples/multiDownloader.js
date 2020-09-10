@@ -22,7 +22,7 @@ const downloader = new Downloader({ logger });
 // Search for a word 'вода' in company name in regions with code 10 and 12 and
 // take companies listed only on the second page and for a company with inn 1659096539
 downloader
-  .getMetaObjects([{ query: 'вода', region: '10,12', page: '2' }, '1659096539'])
+  .getMetadataObjects([{ query: 'вода', region: '10,12', page: '2' }, '1659096539'])
   .then(console.log)
   .catch((err) => logger.log('generalError', err));
 

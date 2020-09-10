@@ -141,7 +141,7 @@ const downloader = new Downloader({ logger });
 // Search for a word 'вода' in company name in regions with code 10 and 12 and
 // take companies listed only on the second page
 downloader
-  .getMetaObjects({ query: 'вода', region: '10,12', page: '2' })
+  .getMetadataObjects({ query: 'вода', region: '10,12', page: '2' })
   .then(console.log)
   .catch((err) => logger.log('generalError', err));
 
@@ -177,7 +177,7 @@ const downloader = new Downloader({ logger });
 // Search for a word 'вода' in company name in regions with code 10 and 12 and
 // take companies listed only on the second page and for a company with inn 1659096539
 downloader
-  .getMetaObjects([{ query: 'вода', region: '10,12', page: '2' }, '1659096539'])
+  .getMetadataObjects([{ query: 'вода', region: '10,12', page: '2' }, '1659096539'])
   .then(console.log)
   .catch((err) => logger.log('generalError', err));
 
@@ -186,14 +186,14 @@ downloader
   .getDocs(['1173525034121', { query: '1659096539' }])
   .catch((err) => logger.log('generalError', err));
 ```
-#### MetaDataRequestManagerDb
+#### MetadataRequestManagerDb
 Позволяет управлять процессом получения сведений об организациях по ИНН с помощью sqlite базы данных, в том числе читать ИНН из файлов, делать поиск, записывать полученные данные в json файлы, логировать ошибки и успешные запросы (с помощью класса Logger), получать отчеты о выполненных запросах.
 
 Так как получаемые сведения являются побочным продуктом процесса скачивания выписок из ЕГРЮЛ и ЕГРИП, объем сведений ограничен следующими полями: полное наименование, сокращенное наименование, адрес, ОГРН, дата получения ОГРН, ИНН, КПП, должность и имя руководителя, тип организации, дата ликвидации, дата признания недействительной.
 
-[Примеры использования](src/nalogru/examples/metaDataRequestManagerDb.js)
+[Примеры использования](src/nalogru/examples/metadataRequestManagerDb.js)
 ```javascript
-const Manager = require('../MetaDataRequestManagerDb');
+const Manager = require('../MetadataRequestManagerDb');
 
 const workingDir = process.argv[2];
 
@@ -377,10 +377,10 @@ Launches the download process
 | [options.httpsAgent] | <code>https.Agent</code> | <code>new Agent()</code> | https agent to manage connections |
 | [options.logger] | <code>Logger</code> | <code>console</code> | logger to log errors and success requests |
 
-#### downloader.getMetaDataByInn(inn) ⇒ <code>Promise</code>
-Gets company meta data by its inn. It is assumed, that only one company can be found, so length of the array of meta dada objects will be 1.
+#### downloader.getMetadataByInn(inn) ⇒ <code>Promise</code>
+Gets company metadata by its inn. It is assumed, that only one company can be found, so length of the array of meta dada objects will be 1.
  
-**Returns**: <code>Promise</code> - Promise object represents an array of meta data objects  
+**Returns**: <code>Promise</code> - Promise object represents an array of metadata objects  
 **Throws**:
 
 - <code>ValidationError</code> - if no company is found
@@ -391,10 +391,10 @@ Gets company meta data by its inn. It is assumed, that only one company can be f
 | --- | --- | --- |
 | inn | <code>string</code> | company inn to search |
 
-#### downloader.getMetaData(params) ⇒ <code>Promise</code>
-Gets meta data of the companies found by query parameters
+#### downloader.getMetadata(params) ⇒ <code>Promise</code>
+Gets metadata of the companies found by query parameters
 
-**Returns**: <code>Promise</code> - Promise object represents an array of meta data objects  
+**Returns**: <code>Promise</code> - Promise object represents an array of metadata objects  
 
 | Param | Type | Description |
 | --- | --- | --- |
@@ -403,30 +403,30 @@ Gets meta data of the companies found by query parameters
 | [params.region] | <code>string</code> | a string of region codes separated by a comma - '5,12' or '10' |
 | [params.page] | <code>string</code> | page number - '2' or '10' |
 
-#### downloader.convertMetaDataItem(item) ⇒ <code>Object</code>
-Converts company meta data according to map
+#### downloader.convertMetadataItem(item) ⇒ <code>Object</code>
+Converts company metadata according to map
 
-**Returns**: <code>Object</code> - converted meta data object  
+**Returns**: <code>Object</code> - converted metadata object  
 
 | Param | Type | Description |
 | --- | --- | --- |
-| item | <code>Object</code> | company meta data object to convert |
+| item | <code>Object</code> | company metadata object to convert |
 
-<a name="Downloader+convertMetaData"></a>
+<a name="Downloader+convertMetadata"></a>
 
-#### downloader.convertMetaData(data) ⇒ <code>Array</code>
-Converts meta data of the companies according to map
+#### downloader.convertMetadata(data) ⇒ <code>Array</code>
+Converts metadata of the companies according to map
  
-**Returns**: <code>Array</code> - array of converted meta data objects  
+**Returns**: <code>Array</code> - array of converted metadata objects  
 
 | Param | Type | Description |
 | --- | --- | --- |
-| data | <code>Array</code> | array of meta data objects to convert |
+| data | <code>Array</code> | array of metadata objects to convert |
 
 #### downloader.getMetaObjects(params) ⇒ <code>Promise</code>
-Gets meta data of the companies by query parameters and convert it
+Gets metadata of the companies by query parameters and convert it
 
-**Returns**: <code>Promise</code> - Promise object represents an array of converted meta data objects  
+**Returns**: <code>Promise</code> - Promise object represents an array of converted metadata objects  
 
 | Param | Type | Description |
 | --- | --- | --- |
@@ -482,11 +482,11 @@ composed by status of result and type of errors
 | --- | --- | --- |
 | queries | <code>Array.&lt;string&gt;</code> | inns of companies to search |
 
-#### multiDownloader.getMetaDataByInn(queries) ⇒ <code>Promise</code>
-Gets meta data of the companies found by inns
+#### multiDownloader.getMetadataByInn(queries) ⇒ <code>Promise</code>
+Gets metadata of the companies found by inns
 
 **Returns**: <code>Promise</code> - Promise object represents an array of arrays of inns
-or arrays of meta data objects, composed by status of result and type of errors  
+or arrays of metadata objects, composed by status of result and type of errors  
 
 | Param | Type | Description |
 | --- | --- | --- |
@@ -504,10 +504,10 @@ Gets EGRUL pdf documents on the companies found by query parameters
 | [queries[].region] | <code>string</code> | a string of region codes separated by a comma - '5,12' or '10' |
 | [queries[].page] | <code>string</code> | page number - '2' or '10' |
 
-#### multiDownloader.getMetaData(queries) ⇒ <code>Promise</code>
-Gets meta data of the companies found by query parameters
+#### multiDownloader.getMetadata(queries) ⇒ <code>Promise</code>
+Gets metadata of the companies found by query parameters
 
-**Returns**: <code>Promise</code> - Promise object represents an array of meta data objects  
+**Returns**: <code>Promise</code> - Promise object represents an array of metadata objects  
 
 | Param | Type | Description |
 | --- | --- | --- |
@@ -516,28 +516,28 @@ Gets meta data of the companies found by query parameters
 | [queries[].region] | <code>string</code> | a string of region codes separated by a comma - '5,12' or '10' |
 | [queries[].page] | <code>string</code> | page number - '2' or '10' |
 
-#### multiDownloader.convertMetaDataItem(item) ⇒ <code>Object</code>
-Converts company meta data according to map
+#### multiDownloader.convertMetadataItem(item) ⇒ <code>Object</code>
+Converts company metadata according to map
 
-**Returns**: <code>Object</code> - converted meta data object  
-
-| Param | Type | Description |
-| --- | --- | --- |
-| item | <code>Object</code> | company meta data object to convert |
-
-#### multiDownloader.convertMetaData(data) ⇒ <code>Array</code>
-Converts meta data of the companies according to map
-
-**Returns**: <code>Array</code> - array of converted meta data objects  
+**Returns**: <code>Object</code> - converted metadata object  
 
 | Param | Type | Description |
 | --- | --- | --- |
-| data | <code>Array</code> | array of meta data objects to convert |
+| item | <code>Object</code> | company metadata object to convert |
+
+#### multiDownloader.convertMetadata(data) ⇒ <code>Array</code>
+Converts metadata of the companies according to map
+
+**Returns**: <code>Array</code> - array of converted metadata objects  
+
+| Param | Type | Description |
+| --- | --- | --- |
+| data | <code>Array</code> | array of metadata objects to convert |
 
 ### multiDownloader.getMetaObjects(queries) ⇒ <code>Promise</code>
-Gets converted meta data of the companies found by query parameters
+Gets converted metadata of the companies found by query parameters
 
-**Returns**: <code>Promise</code> - Promise object represents an array of converted meta data objects  
+**Returns**: <code>Promise</code> - Promise object represents an array of converted metadata objects  
 
 | Param | Type | Description |
 | --- | --- | --- |
@@ -546,8 +546,8 @@ Gets converted meta data of the companies found by query parameters
 | [queries[].region] | <code>string</code> | a string of region codes separated by a comma - '5,12' or '10' |
 | [queries[].page] | <code>string</code> | page number - '2' or '10' |
 
-### Class: MetaDataRequestManagerDb
-#### new MetaDataRequestManagerDb([options])
+### Class: MetadataRequestManagerDb
+#### new MetadataRequestManagerDb([options])
 | Param | Type | Default | Description |
 | --- | --- | --- | --- |
 | [options] | <code>Object</code> | <code>{}</code> | configuration settings |
@@ -565,23 +565,23 @@ Gets converted meta data of the companies found by query parameters
 | [options.updateMode] | <code>boolean</code> | <code>true</code> | update or not json data for inns if json data  for these inns already exist in db |
 | [options.innPerFile] | <code>number</code> | <code>500</code> | number of json objects per output file |
 
-#### metaDataRequestManagerDb.writeReport() ⇒ <code>void</code>
+#### metadataRequestManagerDb.writeReport() ⇒ <code>void</code>
 Writes a report with statistics on downloads
 
-#### metaDataRequestManagerDb.writeErrors() ⇒ <code>void</code>
+#### metadataRequestManagerDb.writeErrors() ⇒ <code>void</code>
 Writes a file with a list of inns, on which some network error occurred
 and they require re-request, and a file with a list of invalid inns
 
-#### metaDataRequestManagerDb.generateReport() ⇒ <code>void</code>
+#### metadataRequestManagerDb.generateReport() ⇒ <code>void</code>
 Writes a report with statistics on downloads and files with lists of inns with errors
 
-#### metaDataRequestManagerDb.getCurrentResult() ⇒ <code>void</code>
+#### metadataRequestManagerDb.getCurrentResult() ⇒ <code>void</code>
 Writes output files with json data for requests completed successfully so far
 
-#### metaDataRequestManagerDb.getAllContent() ⇒ <code>void</code>
+#### metadataRequestManagerDb.getAllContent() ⇒ <code>void</code>
 Writes output files with all json data from jsons table
 
-#### metaDataRequestManagerDb.start() ⇒ <code>Promise</code>
+#### metadataRequestManagerDb.start() ⇒ <code>Promise</code>
 Launches the download process
 
 **Returns**: <code>Promise</code> - Promise object represents void  

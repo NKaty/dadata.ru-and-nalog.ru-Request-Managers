@@ -1,4 +1,4 @@
-const Manager = require('../MetaDataRequestManagerDb');
+const Manager = require('../MetadataRequestManagerDb');
 
 const workingDir = process.argv[2];
 

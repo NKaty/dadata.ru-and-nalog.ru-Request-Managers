@@ -1,8 +1,8 @@
 /**
- * MetaDataRequestManagerDb
- * Meta data request manager class manages multiples requests to nalog.ru website
+ * MetadataRequestManagerDb
+ * Metadata request manager class manages multiples requests to nalog.ru website
  * by using sqlite database.
- * Collects json meta data into a database.
+ * Collects json metadata into a database.
  * Uses only inn for search.
  * Inns must be given in text files, where each line is a single inn.
  * Creates a directory structure on the first run, after which it is required
@@ -19,9 +19,9 @@
 const RequestManagerDb = require('../common/RequestManagerDb');
 const MultiDownloader = require('./MultiDownloader');
 
-class MetaDataRequestManagerDb extends RequestManagerDb {
+class MetadataRequestManagerDb extends RequestManagerDb {
   /**
-   * MetaDataRequestManagerDb class
+   * MetadataRequestManagerDb class
    * @constructor
    * @param {Object} [options={}] - configuration settings
    * @param {string} [options.inputDir='input'] - name of directory with input files
@@ -48,8 +48,8 @@ class MetaDataRequestManagerDb extends RequestManagerDb {
       'Внимание. Произошла ошибка: The captcha is required. Рекомендуется проверить время паузы между запросами.';
     // Use instance of MultiDownloader class to make requests and convert data
     this.downloader = new MultiDownloader({ logger: this.logger });
-    this._makeRequests = this.downloader.getMetaDataByInn.bind(this.downloader);
-    this._extractData = this.downloader.convertMetaDataItem.bind(this.downloader);
+    this._makeRequests = this.downloader.getMetadataByInn.bind(this.downloader);
+    this._extractData = this.downloader.convertMetadataItem.bind(this.downloader);
   }
 
   _getSuccessItemInn(item) {
@@ -71,4 +71,4 @@ class MetaDataRequestManagerDb extends RequestManagerDb {
   }
 }
 
-module.exports = MetaDataRequestManagerDb;
+module.exports = MetadataRequestManagerDb;

@@ -1,6 +1,6 @@
 /**
  * Downloader
- * Downloads meta data and EGRUL pdf documents on companies from nalog.ru website.
+ * Downloads metadata and EGRUL pdf documents on companies from nalog.ru website.
  * Can search by inn, ogrn, company name and region.
  * If several companies are found for the query, they all will be downloaded.
  **/
@@ -43,7 +43,7 @@ class Downloader {
     this.throttle = ratelimit(this.pause);
     this.logger = options.logger || console;
     this.url = 'https://egrul.nalog.ru/';
-    // Meta data information on a company, that can be obtained from request when pdf document is downloading
+    // Metadata information on a company, that can be obtained from request when pdf document is downloading
     this.map = {
       g: 'management',
       n: 'full_name',
@@ -96,7 +96,7 @@ class Downloader {
     }
   }
 
-  // Gets search result, which includes companies meta data
+  // Gets search result, which includes companies metadata
   async _getSearchResult(query, region, token, page = '') {
     let json;
     let docs;
@@ -217,23 +217,23 @@ class Downloader {
   }
 
   /**
-   * @desc Gets company meta data by its inn
+   * @desc Gets company metadata by its inn
    *  It is assumed, that only one company can be found,
    *  so length of the array of meta dada objects will be 1
    * @param {string} inn - company inn to search
-   * @returns {Promise} - Promise object represents an array of meta data objects
+   * @returns {Promise} - Promise object represents an array of metadata objects
    * @throws {ValidationError} - if no company is found
    * @throws {StopError} - if the time limitation of nalog.ru were violated
    * @throws {RequestError} - if network errors occurred
    */
-  async getMetaDataByInn(inn) {
+  async getMetadataByInn(inn) {
     const [query, region] = this._getRequestParams(inn);
     try {
       await this.throttle();
       const token = await this._sendForm(query, region);
       const results = await this._getSearchResult(query, region, token);
       if (results && (!results.length || !results[0].i)) throw new ValidationError('Invalid inn.');
-      this.logger.log('success', `${results[0].i} Meta data is received.`);
+      this.logger.log('success', `${results[0].i} Metadata is received.`);
       return results.slice(0, 1);
     } catch (err) {
       if (err instanceof StopError) throw new StopError(inn);
@@ -245,15 +245,15 @@ class Downloader {
   }
 
   /**
-   * @desc Gets meta data of the companies found by query parameters
+   * @desc Gets metadata of the companies found by query parameters
    * @param {(string|Object)} params - query parameters to search
    * If params is a string, it will be treated as params.query
    * @param {string} params.query - inn, ogrn or company name
    * @param {string} [params.region] - a string of region codes separated by a comma - '5,12' or '10'
    * @param {string} [params.page] - page number - '2' or '10'
-   * @returns {Promise} - Promise object represents an array of meta data objects
+   * @returns {Promise} - Promise object represents an array of metadata objects
    */
-  async getMetaData(params) {
+  async getMetadata(params) {
     const [query, region, page] = this._getRequestParams(params);
     try {
       await this.throttle();
@@ -262,7 +262,7 @@ class Downloader {
       if (results && !results.length) throw new ValidationError('Nothing was found.');
       return results.filter((item) => {
         if (item.i) {
-          this.logger.log('success', `${item.i} Meta data is received.`);
+          this.logger.log('success', `${item.i} Metadata is received.`);
           return true;
         }
       });
@@ -274,11 +274,11 @@ class Downloader {
   }
 
   /**
-   * @desc Converts company meta data according to map
-   * @param {Object} item - company meta data object to convert
-   * @returns {Object} - converted meta data object
+   * @desc Converts company metadata according to map
+   * @param {Object} item - company metadata object to convert
+   * @returns {Object} - converted metadata object
    */
-  convertMetaDataItem(item) {
+  convertMetadataItem(item) {
     return Object.keys(item).reduce((acc, field) => {
       if (field in this.map) {
         if (field === 'g') {
@@ -296,26 +296,26 @@ class Downloader {
   }
 
   /**
-   * @desc Converts meta data of the companies according to map
-   * @param {Array} data - array of meta data objects to convert
-   * @returns {Array} - array of converted meta data objects
+   * @desc Converts metadata of the companies according to map
+   * @param {Array} data - array of metadata objects to convert
+   * @returns {Array} - array of converted metadata objects
    */
-  convertMetaData(data) {
-    return data.map((item) => this.convertMetaDataItem(item));
+  convertMetadata(data) {
+    return data.map((item) => this.convertMetadataItem(item));
   }
 
   /**
-   * @desc Gets meta data of the companies by query parameters and convert it
+   * @desc Gets metadata of the companies by query parameters and convert it
    * @param {(string|Object)} params - query parameters to search
    * If params is a string, it will be treated as params.query
    * @param {string} params.query - inn, ogrn or company name
    * @param {string} [params.region] - a string of region codes separated by a comma - '5,12' or '10'
    * @param {string} [params.page] - page number - '2' or '10'
-   * @return {Promise} - Promise object represents an array of converted meta data objects
+   * @return {Promise} - Promise object represents an array of converted metadata objects
    */
-  async getMetaObjects(params) {
-    const data = await this.getMetaData(params);
-    return this.convertMetaData(data);
+  async getMetadataObjects(params) {
+    const data = await this.getMetadata(params);
+    return this.convertMetadata(data);
   }
 
   /**

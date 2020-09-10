@@ -1,6 +1,6 @@
 /**
  * MultiDownloader
- * Downloads meta data and EGRUL pdf documents on companies from nalog.ru website.
+ * Downloads metadata and EGRUL pdf documents on companies from nalog.ru website.
  * Accepts an array of queries and search by inn, ogrn, company name and region.
  * If several companies are found for the query, they all will be downloaded.
  **/
@@ -64,14 +64,14 @@ class MultiDownloader {
   }
 
   /**
-   * @desc Gets meta data of the companies found by inns
+   * @desc Gets metadata of the companies found by inns
    * @param {Array.<string>} queries - inns of companies to search
    * @returns {Promise} - Promise object represents an array of arrays of inns
-   * or arrays of meta data objects, composed by status of result and type of errors
+   * or arrays of metadata objects, composed by status of result and type of errors
    */
-  async getMetaDataByInn(queries) {
+  async getMetadataByInn(queries) {
     const results = await Promise.allSettled(
-      queries.map((query) => this.downloader.getMetaDataByInn(query))
+      queries.map((query) => this.downloader.getMetadataByInn(query))
     );
     return this._processResults(results);
   }
@@ -90,17 +90,17 @@ class MultiDownloader {
   }
 
   /**
-   * @desc Gets meta data of the companies found by query parameters
+   * @desc Gets metadata of the companies found by query parameters
    * @param {Array.<(string|Object)>} queries - an array of query parameters to search
    * If query parameter is a string, it will be treated as queries[].query
    * @param {string} queries[].query - inn, ogrn or company name
    * @param {string} [queries[].region] - a string of region codes separated by a comma - '5,12' or '10'
    * @param {string} [queries[].page] - page number - '2' or '10'
-   * @returns {Promise} - Promise object represents an array of meta data objects
+   * @returns {Promise} - Promise object represents an array of metadata objects
    */
-  async getMetaData(queries) {
+  async getMetadata(queries) {
     const results = await Promise.allSettled(
-      queries.map((query) => this.downloader.getMetaData(query))
+      queries.map((query) => this.downloader.getMetadata(query))
     );
     return results
       .reduce((acc, result) => {
@@ -111,35 +111,35 @@ class MultiDownloader {
   }
 
   /**
-   * @desc Converts company meta data according to map
-   * @param {Object} item - company meta data object to convert
-   * @returns {Object} - converted meta data object
+   * @desc Converts company metadata according to map
+   * @param {Object} item - company metadata object to convert
+   * @returns {Object} - converted metadata object
    */
-  convertMetaDataItem(item) {
-    return this.downloader.convertMetaDataItem(item);
+  convertMetadataItem(item) {
+    return this.downloader.convertMetadataItem(item);
   }
 
   /**
-   * @desc Converts meta data of the companies according to map
-   * @param {Array} data - array of meta data objects to convert
-   * @returns {Array} - array of converted meta data objects
+   * @desc Converts metadata of the companies according to map
+   * @param {Array} data - array of metadata objects to convert
+   * @returns {Array} - array of converted metadata objects
    */
-  convertMetaData(data) {
-    return this.downloader.convertMetaData(data);
+  convertMetadata(data) {
+    return this.downloader.convertMetadata(data);
   }
 
   /**
-   * @desc Gets converted meta data of the companies found by query parameters
+   * @desc Gets converted metadata of the companies found by query parameters
    * @param {Array.<(string|Object)>} queries - an array of query parameters to search
    * If query parameter is a string, it will be treated as queries[].query
    * @param {string} queries[].query - inn, ogrn or company name
    * @param {string} [queries[].region] - a string of region codes separated by a comma - '5,12' or '10'
    * @param {string} [queries[].page] - page number - '2' or '10'
-   * @returns {Promise} - Promise object represents an array of converted meta data objects
+   * @returns {Promise} - Promise object represents an array of converted metadata objects
    */
-  async getMetaObjects(queries) {
-    const data = await this.getMetaData(queries);
-    return this.convertMetaData(data);
+  async getMetadataObjects(queries) {
+    const data = await this.getMetadata(queries);
+    return this.convertMetadata(data);
   }
 }
 
