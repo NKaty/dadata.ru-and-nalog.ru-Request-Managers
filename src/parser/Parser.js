@@ -1,5 +1,7 @@
 const { PdfReader } = require('pdfreader');
 
+const covertData = require('./map');
+
 class Parser {
   constructor(options = {}) {
     this.reader = options.reader || new PdfReader();
@@ -133,9 +135,14 @@ class Parser {
     return data;
   }
 
+  convertData(data) {
+    return covertData(data);
+  }
+
   async parse(path) {
     const data = await this.readPDF(path);
-    return this.parsePDF(data);
+    const parsedData = this.parsePDF(data);
+    return this.convertData(parsedData);
   }
 }
 
