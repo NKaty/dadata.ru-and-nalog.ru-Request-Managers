@@ -63,16 +63,18 @@ class Parser {
     });
   }
 
-  _getTitleLevel(text, style) {
-    if (!isNaN(text)) return style === '1610' ? 2 : 3;
+  _getTitleLevel(text, style, prevTitleLevel) {
+    if (prevTitleLevel === 3 && this.levelMap[style] === 3 && isNaN(text)) return 4;
+    else if (!isNaN(text)) return style === '1610' ? 2 : 3;
     else return this.levelMap[style];
     // let l;
-    // if (!isNaN(text)) {
+    // if (prevTitleLevel === 3 && this.levelMap[style] === 3 && isNaN(text)) l = 4;
+    // else if (!isNaN(text)) {
     //   l = style === '1610' ? 2 : 3;
     // } else {
-    //   l = levelMap[style];
+    //   l = this.levelMap[style];
     // }
-    // // console.log(text, l);
+    // console.log(text, l);
     // return l;
   }
 
@@ -98,8 +100,9 @@ class Parser {
     rowData.reduce((acc, item) => {
       if (item.size === 1) {
         const [text, style] = Array.from(item.values())[0];
-        const level = this._getTitleLevel(text, style);
+        const level = this._getTitleLevel(text, style, prevTitleLevel);
         if (level === undefined) {
+          // console.log('level unknown', text, style);
           return acc;
         } else if (level > prevTitleLevel) {
           levels.push(acc);
@@ -112,9 +115,9 @@ class Parser {
             prevTitleLevel = level;
             levels = [];
             return data[text];
-          } else if (level === 2) {
-            const currentObj = levels[levels.length - 2];
-            levels.length = 1;
+          } else if (level > 1) {
+            const currentObj = levels[levels.length - (prevTitleLevel - level) - 1];
+            levels.length = levels.length - (prevTitleLevel - level);
             prevTitleLevel = level;
             currentObj[text] = {};
             return currentObj[text];
@@ -130,7 +133,7 @@ class Parser {
         return acc;
       }
     }, data);
-    console.log('parse', JSON.stringify(data, null, 2));
+    // console.log('parse', JSON.stringify(data, null, 2));
 
     return data;
   }
