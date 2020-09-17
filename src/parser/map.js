@@ -37,11 +37,11 @@ const getNameObject = (data) => {
       .filter((item) => !!item)
       .join(' ');
     return {
-      full: fio ? `Индивидуальный предприниматель ${fio}` : null,
+      full: fio ? `ИНДИВИДУАЛЬНЫЙ ПРЕДПРИНИМАТЕЛЬ ${fio}` : null,
       short: fio ? `ИП ${fio}` : null,
       latin: latin || null,
       fio: fio || null,
-      sex: name['Пол'] || null,
+      sex: getData(name, 'Пол'),
       citizenship: getData(data, 'Сведения о гражданстве', 'Гражданство'),
       country: getData(
         data,
@@ -51,23 +51,23 @@ const getNameObject = (data) => {
     };
   }
   return {
-    full: name['Полное наименование'] || null,
-    short: name['Сокращенное наименование'] || null,
+    full: getData(name, 'Полное наименование'),
+    short: getData(name, 'Сокращенное наименование'),
   };
 };
 
 const getAddressObject = (address) => {
   if (address === null) return null;
   const addressObject = {
-    postal_code: address['Почтовый индекс'] || null,
-    region: address['Субъект Российской Федерации'] || null,
-    area: address['Район (улус и т.п.)'] || null,
-    city: address['Город (волость и т.п.)'] || null,
-    settlement: address['Населенный пункт (село и т.п.)'] || null,
-    street: address['Улица (проспект, переулок и т.д.)'] || null,
-    house: address['Дом (владение и т.п.)'] || null,
-    flat: address['Офис (квартира и т.п.)'] || null,
-    additional: address['Дополнительные сведения'] || null,
+    postal_code: getData(address, 'Почтовый индекс'),
+    region: getData(address, 'Субъект Российской Федерации'),
+    area: getData(address, 'Район (улус и т.п.)'),
+    city: getData(address, 'Город (волость и т.п.)'),
+    settlement: getData(address, 'Населенный пункт (село и т.п.)'),
+    street: getData(address, 'Улица (проспект, переулок и т.д.)'),
+    house: getData(address, 'Дом (владение и т.п.)'),
+    flat: getData(address, 'Офис (квартира и т.п.)'),
+    additional: getData(address, 'Дополнительные сведения'),
   };
   return Object.values(addressObject).every((item) => item === null) ? null : addressObject;
 };
@@ -147,8 +147,8 @@ const getAuthoritiesObject = (data) => {
 
 const getOKVEDObject = (okved) => {
   if (okved === null) return null;
-  const value = okved['Код и наименование вида деятельности'];
-  if (!value) return null;
+  const value = getData(okved, 'Код и наименование вида деятельности');
+  if (value === null) return null;
   const [code, ...name] = value.split(' ');
   return { code, name: name.join(' ') };
 };
@@ -156,13 +156,15 @@ const getOKVEDObject = (okved) => {
 const getLicenseObject = (license) => {
   if (license === null) return null;
   return {
-    number: license['Номер лицензии'] || null,
-    issue_date: license['Дата лицензии'] || null,
-    issue_authority:
-      license['Наименование лицензирующего органа, выдавшего или переоформившего лицензию'] || null,
-    valid_from: license['Дата начала действия лицензии'] || null,
-    valid_to: license['Дата окончания действия лицензии'] || null,
-    activity: license['Вид лицензируемой деятельности, на который выдана лицензия'] || null,
+    number: getData(license, 'Номер лицензии'),
+    issue_date: getData(license, 'Дата лицензии'),
+    issue_authority: getData(
+      license,
+      'Наименование лицензирующего органа, выдавшего или переоформившего лицензию'
+    ),
+    valid_from: getData(license, 'Дата начала действия лицензии'),
+    valid_to: getData(license, 'Дата окончания действия лицензии'),
+    activity: getData(license, 'Вид лицензируемой деятельности, на который выдана лицензия'),
   };
 };
 
@@ -186,42 +188,47 @@ const getLiquidationObject = (data) => {
 };
 
 const getManagementObject = (data) => {
-  const management =
-    data['Сведения о лице, имеющем право без доверенности действовать от имени юридического лица'];
-  if (!management) return null;
+  const management = getData(
+    data,
+    'Сведения о лице, имеющем право без доверенности действовать от имени юридического лица'
+  );
+  if (management === null) return null;
+  const name = [management['Фамилия'], management['Имя'], management['Отчество']]
+    .filter((item) => !!item)
+    .join(' ');
   return {
-    post: management['Должность'] || null,
-    name: `${management['Фамилия']} ${management['Имя']} ${management['Отчество']}` || null,
-    inn: management['ИНН'] || null,
+    post: getData(management, 'Должность'),
+    name: name || null,
+    inn: getData(management, 'ИНН'),
   };
 };
 
 const getFounderObject = (founder) => {
   if (founder === null) return null;
+  const name = [founder['Фамилия'], founder['Имя'], founder['Отчество']]
+    .filter((item) => !!item)
+    .join(' ');
   return {
-    name:
-      founder['Полное наименование'] ||
-      `${founder['Фамилия']} ${founder['Имя']} ${founder['Отчество']}` ||
-      null,
-    inn: founder['ИНН'] || null,
-    share_nominal: founder['Номинальная стоимость доли (в рублях)'] || null,
-    share_percent: founder['Размер доли (в процентах)'] || null,
+    name: name || getData(founder, 'Полное наименование'),
+    inn: getData(founder, 'ИНН'),
+    share_nominal: getData(founder, 'Номинальная стоимость доли (в рублях)'),
+    share_percent: getData(founder, 'Размер доли (в процентах)'),
   };
 };
 
 const getBranchObject = (branch) => {
   if (branch === null) return null;
-  const fts = branch['Сведения об учете в налоговом органе по месту нахождения филиала'];
+  const fts = getData(branch, 'Сведения об учете в налоговом органе по месту нахождения филиала');
   return {
-    name: branch['Наименование'] || null,
-    country: branch['Страна места нахождения'] || null,
-    address_string: branch['Адрес места нахождения'] || null,
+    name: getData(branch, 'Наименование'),
+    country: getData(branch, 'Страна места нахождения'),
+    address_string: getData(branch, 'Адрес места нахождения'),
     address: getAddressObject(branch),
     fts_report: fts
       ? {
-          kpp: fts['КПП'],
-          date: fts['Дата постановки на учет'],
-          name: fts['Наименование налогового органа'],
+          kpp: getData(fts, 'КПП'),
+          date: getData(fts, 'Дата постановки на учет'),
+          name: getData(fts, 'Наименование налогового органа'),
         }
       : null,
   };
