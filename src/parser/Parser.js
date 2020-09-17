@@ -10,6 +10,7 @@ class Parser {
       1611: 2,
       1500: 3,
     };
+    this.additionalHeaderStyle = '1501';
   }
 
   readPDF(path) {
@@ -27,7 +28,7 @@ class Parser {
           const prevPage = pages[pages.length - 2];
           const { x, y, text } = item;
 
-          if (style === '1501' || style === '1100') return;
+          if (style === '1100') return;
 
           if ((prevStyle !== '1500' && isNaN(text) && prevStyle === style) || prevX === x) {
             const cell = page.get(prevY).get(prevX);
@@ -92,7 +93,6 @@ class Parser {
 
   parsePDF(rowData) {
     rowData = this._preparePDF(rowData);
-
     let prevTitleLevel = 1;
     let levels = [];
     const data = {};
@@ -102,7 +102,10 @@ class Parser {
         const [text, style] = Array.from(item.values())[0];
         const level = this._getTitleLevel(text, style, prevTitleLevel);
         if (level === undefined) {
-          // console.log('level unknown', text, style);
+          if (style === this.additionalHeaderStyle) {
+            const row = Array.from(item.values());
+            acc['Дополнительные сведения'] = row[0][0];
+          }
           return acc;
         } else if (level > prevTitleLevel) {
           levels.push(acc);

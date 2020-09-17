@@ -153,6 +153,19 @@ const getOKVEDObject = (okved) => {
   return { code, name: name.join(' ') };
 };
 
+const getOKVEDObjects = (okved) => {
+  if (okved === null) return null;
+  const okvedType = getData(okved, 'Дополнительные сведения');
+  return {
+    type: okvedType ? okvedType.slice(1, -1) : null,
+    main: getOKVEDObject(getData(okved, 'Сведения об основном виде деятельности')),
+    additional: getObjects(
+      getData(okved, 'Сведения о дополнительных видах деятельности'),
+      getOKVEDObject
+    ),
+  };
+};
+
 const getLicenseObject = (license) => {
   if (license === null) return null;
   return {
@@ -264,23 +277,12 @@ module.exports = (data) => {
     registration: getRegistrationObject(data),
     liquidation: getLiquidationObject(data),
     state: getData(data, 'Сведения о состоянии юридического лица', 'Состояние'),
-    okveds: {
-      main: getOKVEDObject(
-        getData(
-          data,
-          'Сведения о видах экономической деятельности по Общероссийскому классификатору видов экономической деятельности',
-          'Сведения об основном виде деятельности'
-        )
-      ),
-      additional: getObjects(
-        getData(
-          data,
-          'Сведения о видах экономической деятельности по Общероссийскому классификатору видов экономической деятельности',
-          'Сведения о дополнительных видах деятельности'
-        ),
-        getOKVEDObject
-      ),
-    },
+    okveds: getOKVEDObjects(
+      getData(
+        data,
+        'Сведения о видах экономической деятельности по Общероссийскому классификатору видов экономической деятельности'
+      )
+    ),
     licenses: getObjects(getData(data, 'Сведения о лицензиях'), getLicenseObject),
     authorities: getAuthoritiesObject(data),
     management: getManagementObject(data),
