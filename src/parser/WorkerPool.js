@@ -1,23 +1,71 @@
 const { Worker } = require('worker_threads');
+const { AsyncResource } = require('async_hooks');
+const { EventEmitter } = require('events');
 
-class WorkerPool {
+const kTaskInfo = Symbol('kTaskInfo');
+const kWorkerFreedEvent = Symbol('kWorkerFreedEvent');
+
+class WorkerPoolTaskInfo extends AsyncResource {
+  constructor(callback) {
+    super('WorkerPoolTaskInfo');
+    this.callback = callback;
+  }
+
+  done(err, result) {
+    this.runInAsyncScope(this.callback, null, err, result);
+    this.emitDestroy();
+  }
+}
+
+class WorkerPool extends EventEmitter {
   constructor(workerPath, numberOfThreads) {
+    super();
     this.queue = [];
     this.workers = {};
     this.activeWorkers = {};
     this.workerPath = workerPath;
     this.numberOfThreads = numberOfThreads;
-    this.init();
+    this.count = 0;
+    this._init();
   }
 
-  init() {
+  _init() {
     if (!this.numberOfThreads || isNaN(this.numberOfThreads) || this.numberOfThreads < 1) {
       return null;
     }
     for (let i = 0; i < this.numberOfThreads; i += 1) {
-      this.workers[i] = new Worker(this.workerPath);
-      this.activeWorkers[i] = false;
+      this._addNewWorker(i);
     }
+    this.on(kWorkerFreedEvent, (id) => {
+      if (this.queue.length) this._runWorker(id);
+    });
+  }
+
+  _addNewWorker(i) {
+    const worker = new Worker(this.workerPath);
+
+    worker.on('message', (result) => {
+      worker[kTaskInfo].done(null, result);
+      worker[kTaskInfo] = null;
+      this.activeWorkers[i] = false;
+      this.emit(kWorkerFreedEvent, i);
+    });
+
+    worker.on('error', (err) => {
+      if (worker[kTaskInfo]) worker[kTaskInfo].done(err, null);
+      else this.emit('error', err);
+      this._removeWorker(i);
+      this._addNewWorker(i);
+    });
+
+    this.workers[i] = worker;
+    this.activeWorkers[i] = false;
+    this.emit(kWorkerFreedEvent, i);
+  }
+
+  _removeWorker(i) {
+    this.workers[i].terminate();
+    delete this.workers[i];
   }
 
   getInactiveWorker() {
@@ -29,30 +77,11 @@ class WorkerPool {
     return -1;
   }
 
-  runWorker(workerId, queueItem) {
+  _runWorker(workerId, queueItem = null) {
+    if (queueItem === null) queueItem = this.queue.shift();
     const worker = this.workers[workerId];
     this.activeWorkers[workerId] = true;
-    const resultCallback = (result) => {
-      queueItem.callback(null, result);
-      console.log(queueItem.data, workerId);
-      cleanUp();
-    };
-    const errorCallback = (error) => {
-      queueItem.callback(error);
-      cleanUp();
-    };
-    const cleanUp = () => {
-      worker.removeAllListeners('message');
-      worker.removeAllListeners('error');
-      this.activeWorkers[workerId] = false;
-      if (!this.queue.length) {
-        worker.unref();
-        return;
-      }
-      this.runWorker(workerId, this.queue.shift());
-    };
-    worker.once('message', resultCallback);
-    worker.once('error', errorCallback);
+    worker[kTaskInfo] = new WorkerPoolTaskInfo(queueItem.callback);
     worker.postMessage(queueItem.data);
   }
 
@@ -62,9 +91,7 @@ class WorkerPool {
       const queueItem = {
         data,
         callback: (error, result) => {
-          if (error) {
-            return reject(error);
-          }
+          if (error) return reject(error);
           return resolve(result);
         },
       };
@@ -72,8 +99,12 @@ class WorkerPool {
         this.queue.push(queueItem);
         return;
       }
-      this.runWorker(availableWorkerId, queueItem);
+      this._runWorker(availableWorkerId, queueItem);
     });
+  }
+
+  async close() {
+    await Promise.allSettled(this.workers.map((worker) => worker.terminate()));
   }
 }
 
