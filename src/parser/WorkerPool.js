@@ -1,6 +1,7 @@
 const { Worker } = require('worker_threads');
 const { AsyncResource } = require('async_hooks');
 const { EventEmitter } = require('events');
+const { cpus } = require('os');
 
 const kTaskInfo = Symbol('kTaskInfo');
 const kWorkerFreedEvent = Symbol('kWorkerFreedEvent');
@@ -18,14 +19,14 @@ class WorkerPoolTaskInfo extends AsyncResource {
 }
 
 class WorkerPool extends EventEmitter {
-  constructor(workerPath, numberOfThreads) {
+  constructor(workerPath, dbPath, numberOfThreads) {
     super();
     this.queue = [];
     this.workers = {};
     this.activeWorkers = {};
     this.workerPath = workerPath;
-    this.numberOfThreads = numberOfThreads;
-    this.count = 0;
+    this.dbPath = dbPath;
+    this.numberOfThreads = numberOfThreads || cpus().length;
     this._init();
   }
 
@@ -42,10 +43,11 @@ class WorkerPool extends EventEmitter {
   }
 
   _addNewWorker(i) {
-    const worker = new Worker(this.workerPath);
+    const worker = new Worker(this.workerPath, { workerData: { db: this.dbPath } });
 
     worker.on('message', (result) => {
-      worker[kTaskInfo].done(null, result);
+      if (result.status === 'success') worker[kTaskInfo].done(null, result);
+      else worker[kTaskInfo].done(result.error, null);
       worker[kTaskInfo] = null;
       this.activeWorkers[i] = false;
       this.emit(kWorkerFreedEvent, i);
@@ -65,14 +67,12 @@ class WorkerPool extends EventEmitter {
 
   _removeWorker(i) {
     this.workers[i].terminate();
-    delete this.workers[i];
+    this.workers[i] = null;
   }
 
   getInactiveWorker() {
     for (let i = 0; i < this.numberOfThreads; i += 1) {
-      if (!this.activeWorkers[i]) {
-        return i;
-      }
+      if (!this.activeWorkers[i]) return i;
     }
     return -1;
   }
@@ -104,7 +104,7 @@ class WorkerPool extends EventEmitter {
   }
 
   async close() {
-    await Promise.allSettled(this.workers.map((worker) => worker.terminate()));
+    await Promise.allSettled(Object.values(this.workers).map((worker) => worker.terminate()));
   }
 }
 
