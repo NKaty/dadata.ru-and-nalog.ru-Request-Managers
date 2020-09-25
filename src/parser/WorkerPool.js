@@ -46,7 +46,7 @@ class WorkerPool extends EventEmitter {
     const worker = new Worker(this.workerPath, { workerData: { db: this.dbPath } });
 
     worker.on('message', (result) => {
-      if (result.status === 'success') worker[kTaskInfo].done(null, result);
+      if (result.status === 'success') worker[kTaskInfo].done(null, result.data);
       else worker[kTaskInfo].done(result.error, null);
       worker[kTaskInfo] = null;
       this.activeWorkers[i] = false;

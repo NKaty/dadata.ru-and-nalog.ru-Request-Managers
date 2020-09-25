@@ -1,6 +1,7 @@
 const { resolve } = require('path');
 const { existsSync, mkdirSync, readdirSync, statSync } = require('fs');
 const Database = require('better-sqlite3');
+const { performance } = require('perf_hooks');
 
 const WorkerPool = require('./WorkerPool');
 const { cleanDir } = require('../common/helpers');
@@ -100,6 +101,22 @@ class Manager {
     });
   }
 
+  _update(result, data) {
+    if (
+      this.db
+        .prepare('SELECT ogrn FROM jsons WHERE path = ? AND ogrn = ?')
+        .get(data, result.ogrn) === undefined
+    ) {
+      this.db
+        .prepare('INSERT INTO jsons (path, inn, ogrn, json) VALUES (?, ?, ?, ?)')
+        .run(data, result.inn, result.ogrn, JSON.stringify(result));
+    } else {
+      this.db
+        .prepare('UPDATE jsons SET json = ? WHERE path = ? AND ogrn = ?')
+        .run(JSON.stringify(result), data, result.ogrn);
+    }
+  }
+
   async _parse() {
     const paths = this.db
       .prepare('SELECT DISTINCT path FROM paths WHERE status = ?')
@@ -108,20 +125,32 @@ class Manager {
       .all();
     // console.log(paths);
     const result = await Promise.allSettled(paths.map((path) => this._parser.run(path[0])));
-    result.forEach((item) => {
-      if (item.status === 'fulfilled') console.log('value', item.value);
+    result.forEach((item, index) => {
+      if (item.status === 'fulfilled') this._update(item.value, paths[index][0]);
       else console.log(item.reason);
     });
+    console.timeEnd('time');
   }
 
   async start() {
     this._processInputDir();
     await this._parse();
-    await this._parser.close();
+    // await this._parser.close();
   }
 }
 
 module.exports = Manager;
 
 const manager = new Manager({ inputDir: 'docs' });
-manager.start();
+console.log('not in workers');
+(async function () {
+  const times = [];
+  for (let i = 0; i < 10; i++) {
+    const t = performance.now();
+    console.time('time');
+    console.log(i);
+    await manager.start();
+    times.push(performance.now() - t);
+  }
+  console.log(times.reduce((acc, item) => acc + item, 0) / 10);
+})();
