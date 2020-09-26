@@ -46,14 +46,15 @@ class WorkerPool extends EventEmitter {
     const worker = new Worker(this.workerPath, { workerData: { db: this.dbPath } });
 
     worker.on('message', (result) => {
-      if (result.status === 'success') worker[kTaskInfo].done(null, result.data);
-      else worker[kTaskInfo].done(result.error, null);
+      if (result.status === 'success') worker[kTaskInfo].done(null, result);
+      else worker[kTaskInfo].done(result, null);
       worker[kTaskInfo] = null;
       this.activeWorkers[i] = false;
       this.emit(kWorkerFreedEvent, i);
     });
 
     worker.on('error', (err) => {
+      // general errors
       if (worker[kTaskInfo]) worker[kTaskInfo].done(err, null);
       else this.emit('error', err);
       this._removeWorker(i);

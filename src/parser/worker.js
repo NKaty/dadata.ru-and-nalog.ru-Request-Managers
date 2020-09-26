@@ -8,11 +8,11 @@ if (isMainThread) {
 
 const parser = new Parser();
 
-parentPort.on('message', async (data) => {
+parentPort.on('message', async (path) => {
   try {
-    const result = await parser.parse(data);
-    parentPort.postMessage({ status: 'success', data: result });
+    const result = await parser.parse(path);
+    parentPort.postMessage({ status: 'success', data: result, path });
   } catch (error) {
-    parentPort.postMessage({ status: 'error', error });
+    parentPort.postMessage({ status: 'error', error, path });
   }
 });

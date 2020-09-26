@@ -1,10 +1,11 @@
 const { resolve } = require('path');
 const { existsSync, mkdirSync, readdirSync, statSync } = require('fs');
 const Database = require('better-sqlite3');
-const { performance } = require('perf_hooks');
+// const { performance } = require('perf_hooks');
 
 const WorkerPool = require('./WorkerPool');
-const { cleanDir } = require('../common/helpers');
+const Logger = require('../common/Logger');
+const { getDate, cleanDir } = require('../common/helpers');
 
 class Manager {
   constructor(options) {
@@ -28,12 +29,19 @@ class Manager {
     this._reportsPath = resolve(this.workingDir, this.reportsDir);
     this._mainReportPath = resolve(this._reportsPath, this.reportFile);
     this.dbPath = resolve(this.workingDir, this.dbFile);
+    // this._parsingErrorStream = null;
+    // this._streams = [this._parsingErrorStream];
     // Number of requests simultaneously sent and processed
     this.requestsLength = options.requestsLength || 100;
     // Clean or not the table with json data before a new portion input files
     this.cleanDB = options.cleanDB || false;
     this.db = new Database(this.dbPath);
     this._parser = new WorkerPool(resolve(__dirname, 'worker.js'), this.dbPath, 2);
+    this.logger = new Logger({
+      generalErrorPath: resolve(this._logsPath, `generalErrors_${getDate()}.log`),
+      parsingErrorPath: resolve(this._logsPath, `parsingErrors_${getDate()}.log`),
+      successPath: resolve(this._logsPath, `success_${getDate()}.log`),
+    });
     this._init();
   }
 
@@ -101,19 +109,29 @@ class Manager {
     });
   }
 
-  _update(result, data) {
-    if (
-      this.db
-        .prepare('SELECT ogrn FROM jsons WHERE path = ? AND ogrn = ?')
-        .get(data, result.ogrn) === undefined
-    ) {
-      this.db
-        .prepare('INSERT INTO jsons (path, inn, ogrn, json) VALUES (?, ?, ?, ?)')
-        .run(data, result.inn, result.ogrn, JSON.stringify(result));
+  _updateAfterParsing(result) {
+    const updateStatus = this.db.prepare('UPDATE paths SET status = ? WHERE path = ?');
+    if (result.status === 'fulfilled') {
+      const { data, path } = result.value;
+      updateStatus.run('success', path);
+      if (
+        this.db
+          .prepare('SELECT ogrn FROM jsons WHERE path = ? AND ogrn = ?')
+          .get(path, data.ogrn) === undefined
+      ) {
+        this.db
+          .prepare('INSERT INTO jsons (path, inn, ogrn, json) VALUES (?, ?, ?, ?)')
+          .run(path, data.inn, data.ogrn, JSON.stringify(data));
+      } else {
+        this.db
+          .prepare('UPDATE jsons SET json = ? WHERE path = ? AND ogrn = ?')
+          .run(JSON.stringify(data), path, data.ogrn);
+      }
+      this.logger.log('success', 'Has been parsed.', path);
     } else {
-      this.db
-        .prepare('UPDATE jsons SET json = ? WHERE path = ? AND ogrn = ?')
-        .run(JSON.stringify(result), data, result.ogrn);
+      const { error, path } = result.reason;
+      updateStatus.run('error', path);
+      this.logger.log('parsingError', error, path);
     }
   }
 
@@ -123,34 +141,32 @@ class Manager {
       .bind('raw')
       .raw()
       .all();
-    // console.log(paths);
-    const result = await Promise.allSettled(paths.map((path) => this._parser.run(path[0])));
-    result.forEach((item, index) => {
-      if (item.status === 'fulfilled') this._update(item.value, paths[index][0]);
-      else console.log(item.reason);
-    });
-    console.timeEnd('time');
+    const results = await Promise.allSettled(paths.map((path) => this._parser.run(path[0])));
+    results.forEach((result) => this._updateAfterParsing(result));
+    // console.timeEnd('time');
   }
 
   async start() {
     this._processInputDir();
     await this._parse();
-    // await this._parser.close();
+    await this._parser.close();
   }
 }
 
 module.exports = Manager;
 
-const manager = new Manager({ inputDir: 'docs' });
-console.log('not in workers');
-(async function () {
-  const times = [];
-  for (let i = 0; i < 10; i++) {
-    const t = performance.now();
-    console.time('time');
-    console.log(i);
-    await manager.start();
-    times.push(performance.now() - t);
-  }
-  console.log(times.reduce((acc, item) => acc + item, 0) / 10);
-})();
+const manager = new Manager({ inputDir: 'output' });
+manager.start();
+
+// console.log('not in workers');
+// (async function () {
+//   const times = [];
+//   for (let i = 0; i < 10; i++) {
+//     const t = performance.now();
+//     console.time('time');
+//     console.log(i);
+//     await manager.start();
+//     times.push(performance.now() - t);
+//   }
+//   console.log(times.reduce((acc, item) => acc + item, 0) / 10);
+// })();
