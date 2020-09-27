@@ -1,11 +1,19 @@
 const { resolve } = require('path');
-const { existsSync, mkdirSync, readdirSync, statSync } = require('fs');
+const {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  statSync,
+  writeFileSync,
+  createWriteStream,
+  unlinkSync,
+} = require('fs');
 const Database = require('better-sqlite3');
 // const { performance } = require('perf_hooks');
 
 const WorkerPool = require('./WorkerPool');
 const Logger = require('../common/Logger');
-const { getDate, cleanDir } = require('../common/helpers');
+const { closeStreams, getDate, cleanDir } = require('../common/helpers');
 
 class Manager {
   constructor(options) {
@@ -20,6 +28,8 @@ class Manager {
     this.reportsDir = options.reportsDir || 'reports';
     // Report with statistics on downloads
     this.reportFile = 'report.txt';
+    // List of inns, on which some network error occurred and they require re-request
+    this.parsingErrorsFile = 'parsingErrors.txt';
     this.dbFile = options.dbFile || 'data.db';
     // Directory, where all other directories and files will be created
     this.workingDir = options.workingDir || process.cwd();
@@ -28,9 +38,10 @@ class Manager {
     this._logsPath = resolve(this.workingDir, this.logsDir);
     this._reportsPath = resolve(this.workingDir, this.reportsDir);
     this._mainReportPath = resolve(this._reportsPath, this.reportFile);
+    this._parsingErrorsPath = resolve(this._reportsPath, this.parsingErrorsFile);
     this.dbPath = resolve(this.workingDir, this.dbFile);
-    // this._parsingErrorStream = null;
-    // this._streams = [this._parsingErrorStream];
+    this._parsingErrorStream = null;
+    this._streams = [this._parsingErrorStream];
     // Number of pdf files simultaneously sent to worker pool
     this.pdfLength = options.pdfLength || 100;
     // Clean or not the table with json data before a new portion input files
@@ -152,10 +163,80 @@ class Manager {
     // console.timeEnd('time');
   }
 
+  _collectStat() {
+    const selectStatus = this.db.prepare('SELECT COUNT(path) AS count FROM paths WHERE status = ?');
+    return {
+      paths: this.db.prepare('SELECT COUNT(path) AS count FROM paths').get().count,
+      success: selectStatus.get('success').count,
+      parsingErrors: selectStatus.get('error').count,
+    };
+  }
+
+  /**
+   * @desc Writes a report with statistics on downloads
+   * @returns {void}
+   */
+  writeReport() {
+    const stat = this._collectStat();
+    const report = `Общее количество pdf файлов: ${stat.paths}
+Обработано файлов: ${stat.success + stat.parsingErrors}
+  успешных: ${stat.success}
+  неудачных: ${stat.parsingErrors}
+Отчет сформирован: ${getDate(true)}`;
+
+    writeFileSync(this._mainReportPath, report);
+  }
+
+  /**
+   * @desc Writes a file with a list of inns, on which some network error occurred
+   * and they require re-request, and a file with a list of invalid inns
+   * @returns {void}
+   */
+  writeErrors() {
+    const errors = this.db
+      .prepare('SELECT path FROM paths WHERE status = ?')
+      .raw()
+      .all('error')
+      .flat();
+
+    if (errors.length) {
+      if (!this._parsingErrorStream)
+        this._parsingErrorStream = createWriteStream(this._parsingErrorsPath);
+      errors.forEach((path) => this._parsingErrorStream.write(`${path}\n`));
+      this._parsingErrorStream.end(`Отчет сформирован: ${getDate(true)}\n`);
+    } else {
+      if (existsSync(this._parsingErrorsPath)) unlinkSync(this._parsingErrorsPath);
+    }
+  }
+
+  /**
+   * @desc Writes a report with statistics on downloads and files with lists of inns with errors
+   * @returns {void}
+   */
+  generateReport() {
+    try {
+      this.writeReport();
+      this.writeErrors();
+    } catch (err) {
+      this.logger.log('generalError', err);
+    }
+  }
+
+  async _cleanBeforeFinish() {
+    try {
+      await closeStreams(this._streams);
+      await this.logger.closeStreams();
+      await this._parser.close();
+    } catch (err) {
+      console.log(err);
+    }
+  }
+
   async start() {
     this._processInputDir();
     await this._parse();
-    await this._parser.close();
+    this.generateReport();
+    await this._cleanBeforeFinish();
   }
 }
 
