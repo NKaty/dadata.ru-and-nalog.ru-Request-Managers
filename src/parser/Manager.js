@@ -31,8 +31,8 @@ class Manager {
     this.dbPath = resolve(this.workingDir, this.dbFile);
     // this._parsingErrorStream = null;
     // this._streams = [this._parsingErrorStream];
-    // Number of requests simultaneously sent and processed
-    this.requestsLength = options.requestsLength || 100;
+    // Number of pdf files simultaneously sent to worker pool
+    this.pdfLength = options.pdfLength || 100;
     // Clean or not the table with json data before a new portion input files
     this.cleanDB = options.cleanDB || false;
     this.db = new Database(this.dbPath);
@@ -135,14 +135,20 @@ class Manager {
     }
   }
 
-  async _parse() {
-    const paths = this.db
-      .prepare('SELECT DISTINCT path FROM paths WHERE status = ?')
-      .bind('raw')
-      .raw()
-      .all();
-    const results = await Promise.allSettled(paths.map((path) => this._parser.run(path[0])));
+  async _batchParse(paths) {
+    const results = await Promise.allSettled(paths.map((path) => this._parser.run(path)));
     results.forEach((result) => this._updateAfterParsing(result));
+  }
+
+  async _parse() {
+    const pathArray = this.db
+      .prepare('SELECT DISTINCT path FROM paths WHERE status = ?')
+      .raw()
+      .all('raw');
+    while (pathArray.length) {
+      const paths = pathArray.splice(0, this.pdfLength).flat();
+      await this._batchParse(paths);
+    }
     // console.timeEnd('time');
   }
 
@@ -158,7 +164,6 @@ module.exports = Manager;
 const manager = new Manager({ inputDir: 'output' });
 manager.start();
 
-// console.log('not in workers');
 // (async function () {
 //   const times = [];
 //   for (let i = 0; i < 10; i++) {
