@@ -14,6 +14,7 @@ const Database = require('better-sqlite3');
 const WorkerPool = require('./WorkerPool');
 const Logger = require('../common/Logger');
 const { closeStreams, getDate, cleanDir } = require('../common/helpers');
+const extractData = require('./extractData');
 
 class Manager {
   constructor(options) {
@@ -41,10 +42,13 @@ class Manager {
     this._parsingErrorsPath = resolve(this._reportsPath, this.parsingErrorsFile);
     this.dbPath = resolve(this.workingDir, this.dbFile);
     this._parsingErrorStream = null;
-    this._streams = [this._parsingErrorStream];
+    this._successOutputStream = null;
+    this._streams = [this._parsingErrorStream, this._successOutputStream];
     // Number of pdf files simultaneously sent to worker pool
     this.pdfLength = options.pdfLength || 100;
     // Clean or not the table with json data before a new portion input files
+    // Number of json objects per output file
+    this.pdfObjectsPerFile = options.pdfObjectsPerFile || 500;
     this.cleanDB = options.cleanDB || false;
     this.db = new Database(this.dbPath);
     this._parser = new WorkerPool(resolve(__dirname, 'worker.js'), this.dbPath, 2);
@@ -53,6 +57,7 @@ class Manager {
       parsingErrorPath: resolve(this._logsPath, `parsingErrors_${getDate()}.log`),
       successPath: resolve(this._logsPath, `success_${getDate()}.log`),
     });
+    this.extractData = options.extractData || null;
     this._init();
   }
 
@@ -76,6 +81,7 @@ class Manager {
         `CREATE TABLE IF NOT EXISTS paths (
              id INTEGER PRIMARY KEY,
              path TEXT,
+             ogrn TEXT DEFAULT NULL,
              status TEXT CHECK(status IN ('raw', 'success', 'error')))`
       )
       .run();
@@ -121,10 +127,10 @@ class Manager {
   }
 
   _updateAfterParsing(result) {
-    const updateStatus = this.db.prepare('UPDATE paths SET status = ? WHERE path = ?');
+    const updateStatus = this.db.prepare('UPDATE paths SET status = ?, ogrn = ? WHERE path = ?');
     if (result.status === 'fulfilled') {
       const { data, path } = result.value;
-      updateStatus.run('success', path);
+      updateStatus.run('success', data.ogrn, path);
       if (
         this.db
           .prepare('SELECT ogrn FROM jsons WHERE path = ? AND ogrn = ?')
@@ -141,7 +147,7 @@ class Manager {
       this.logger.log('success', 'Has been parsed.', path);
     } else {
       const { error, path } = result.reason;
-      updateStatus.run('error', path);
+      updateStatus.run('error', null, path);
       this.logger.log('parsingError', error, path);
     }
   }
@@ -161,6 +167,67 @@ class Manager {
       await this._batchParse(paths);
     }
     // console.timeEnd('time');
+  }
+
+  // Writes json data from jsons tables to output files
+  _writeJSONFiles(jsonSelect, getJSON) {
+    let fileCount = 1;
+    let lineCount = 0;
+    this._successOutputStream = createWriteStream(
+      resolve(this._outputPath, `${getDate()}_${fileCount}.json`)
+    );
+    this._successOutputStream.write('[');
+
+    for (const item of jsonSelect.iterate()) {
+      // If number of json objects in a file equals or greater than this.innPerFile,
+      // start a new output file
+      if (lineCount >= this.pdfObjectsPerFile) {
+        lineCount = 0;
+        this._successOutputStream.end('\n]\n');
+        fileCount += 1;
+        this._successOutputStream = createWriteStream(
+          resolve(this._outputPath, `${getDate()}_${fileCount}.json`)
+        );
+        this._successOutputStream.write('[');
+      }
+      const json = getJSON(item);
+      if (json !== undefined) {
+        const data = this.extractData
+          ? JSON.stringify(this.extractData(item.path, JSON.parse(json), true))
+          : json;
+        if (lineCount === 0) this._successOutputStream.write(`\n${data}`);
+        else this._successOutputStream.write(`,\n${data}`);
+        lineCount += 1;
+      }
+    }
+
+    this._successOutputStream.end('\n]\n');
+  }
+
+  /**
+   * @desc Writes output files with json data for requests completed successfully so far
+   * @returns {void}
+   */
+  getResult() {
+    const pathsSelect = this.db
+      .prepare('SELECT path, ogrn FROM paths WHERE status = ?')
+      .bind('success');
+    this._writeJSONFiles(
+      pathsSelect,
+      (item) =>
+        this.db
+          .prepare('SELECT json FROM jsons WHERE path = ? AND ogrn = ?')
+          .get(item.path, item.ogrn).json
+    );
+  }
+
+  /**
+   * @desc Writes output files with all json data from jsons table
+   * @returns {void}
+   */
+  getAllContent() {
+    const jsonSelect = this.db.prepare('SELECT path, json FROM jsons');
+    this._writeJSONFiles(jsonSelect, (item) => item.json);
   }
 
   _collectStat() {
@@ -235,6 +302,7 @@ class Manager {
   async start() {
     this._processInputDir();
     await this._parse();
+    this.getResult();
     this.generateReport();
     await this._cleanBeforeFinish();
   }
@@ -242,7 +310,7 @@ class Manager {
 
 module.exports = Manager;
 
-const manager = new Manager({ inputDir: 'output' });
+const manager = new Manager({ inputDir: 'output', extractData });
 manager.start();
 
 // (async function () {
