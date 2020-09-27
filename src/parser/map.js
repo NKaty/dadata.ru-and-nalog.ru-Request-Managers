@@ -58,18 +58,24 @@ const getNameObject = (data) => {
 
 const getAddressObject = (address) => {
   if (address === null) return null;
-  const addressObject = {
-    postal_code: getData(address, 'Почтовый индекс'),
-    region: getData(address, 'Субъект Российской Федерации'),
-    area: getData(address, 'Район (улус и т.п.)'),
-    city: getData(address, 'Город (волость и т.п.)'),
-    settlement: getData(address, 'Населенный пункт (село и т.п.)'),
-    street: getData(address, 'Улица (проспект, переулок и т.д.)'),
-    house: getData(address, 'Дом (владение и т.п.)'),
-    flat: getData(address, 'Офис (квартира и т.п.)'),
-    additional: getData(address, 'Дополнительные сведения'),
-  };
-  return Object.values(addressObject).every((item) => item === null) ? null : addressObject;
+  const addressMap = new Map([
+    ['postal_code', getData(address, 'Почтовый индекс')],
+    ['region', getData(address, 'Субъект Российской Федерации')],
+    ['area', getData(address, 'Район (улус и т.п.)')],
+    ['city', getData(address, 'Город (волость и т.п.)')],
+    ['settlement', getData(address, 'Населенный пункт (село и т.п.)')],
+    ['street', getData(address, 'Улица (проспект, переулок и т.д.)')],
+    ['house', getData(address, 'Дом (владение и т.п.)')],
+    ['flat', getData(address, 'Офис (квартира и т.п.)')],
+    ['additional', getData(address, 'Дополнительные сведения')],
+  ]);
+  let fullAddress = '';
+  addressMap.forEach((value, key) => {
+    if (value !== null && key !== 'additional') fullAddress += `${value}, `;
+  });
+  if (!fullAddress && !addressMap.get('additional')) return null;
+  addressMap.set('full_address', fullAddress.slice(0, -2));
+  return Object.fromEntries(addressMap.entries());
 };
 
 const getRegistrationObject = (data) => {
