@@ -59,6 +59,8 @@ class Manager {
       successPath: resolve(this._logsPath, `success_${getDate()}.log`),
     });
     this.extractData = options.extractData || null;
+    this.getResultAsArrays = this.getResultAsArrays.bind(this);
+    this.getAllContentAsArrays = this.getAllContentAsArrays.bind(this);
     this._init();
   }
 
@@ -168,38 +170,20 @@ class Manager {
   }
 
   // Writes json data from jsons tables to output files
-  _writeJSONFiles(jsonSelect, getJSON) {
+  _writeJSONFiles(getResultArraysGen) {
     let fileCount = 1;
-    let lineCount = 0;
-    this._successOutputStream = createWriteStream(
-      resolve(this._outputPath, `${getDate()}_${fileCount}.json`)
-    );
-    this._successOutputStream.write('[');
-
-    for (const item of jsonSelect.iterate()) {
-      // If number of json objects in a file equals or greater than this.innPerFile,
-      // start a new output file
-      if (lineCount >= this.pdfObjectsPerFile) {
-        lineCount = 0;
-        this._successOutputStream.end('\n]\n');
-        fileCount += 1;
-        this._successOutputStream = createWriteStream(
-          resolve(this._outputPath, `${getDate()}_${fileCount}.json`)
-        );
-        this._successOutputStream.write('[');
-      }
-      const json = getJSON(item);
-      if (json !== undefined) {
-        const data = this.extractData
-          ? JSON.stringify(this.extractData(item.path, JSON.parse(json), true))
-          : json;
-        if (lineCount === 0) this._successOutputStream.write(`\n${data}`);
-        else this._successOutputStream.write(`,\n${data}`);
-        lineCount += 1;
-      }
+    for (const batch of getResultArraysGen(this.pdfObjectsPerFile)) {
+      this._successOutputStream = createWriteStream(
+        resolve(this._outputPath, `${getDate()}_${fileCount}.json`)
+      );
+      this._successOutputStream.write('[');
+      batch.forEach((data, index) => {
+        if (index === 0) this._successOutputStream.write(`\n${JSON.stringify(data)}`);
+        else this._successOutputStream.write(`,\n${JSON.stringify(data)}`);
+      });
+      fileCount += 1;
+      this._successOutputStream.end('\n]\n');
     }
-
-    this._successOutputStream.end('\n]\n');
   }
 
   /**
@@ -207,16 +191,7 @@ class Manager {
    * @returns {void}
    */
   getResult() {
-    const pathsSelect = this.db
-      .prepare('SELECT path, ogrn FROM paths WHERE status = ?')
-      .bind('success');
-    this._writeJSONFiles(
-      pathsSelect,
-      (item) =>
-        this.db
-          .prepare('SELECT json FROM jsons WHERE path = ? AND ogrn = ?')
-          .get(item.path, item.ogrn).json
-    );
+    this._writeJSONFiles(this.getResultAsArrays);
   }
 
   /**
@@ -224,22 +199,21 @@ class Manager {
    * @returns {void}
    */
   getAllContent() {
-    const jsonSelect = this.db.prepare('SELECT path, json FROM jsons');
-    this._writeJSONFiles(jsonSelect, (item) => item.json);
+    this._writeJSONFiles(this.getAllContentAsArrays);
   }
 
   // Writes json data from jsons tables to output files
-  *_getResultArrays(jsonSelect, getJSON) {
+  *_getResultArrays(getItems, getJSON, limit) {
     let offset = 0;
-    let paths = jsonSelect.all(this.pdfObjectsPerArray, offset);
+    let paths = getItems(offset);
     while (paths.length) {
-      offset += this.pdfObjectsPerArray;
+      offset += limit;
       const dataArray = paths.map((item) => {
         const data = JSON.parse(getJSON(item));
         return this.extractData ? this.extractData(item.path, data, true) : data;
       });
       yield dataArray;
-      paths = jsonSelect.all(this.pdfObjectsPerArray, offset);
+      paths = getItems(offset);
     }
   }
 
@@ -247,16 +221,17 @@ class Manager {
    * @desc Writes output files with json data for requests completed successfully so far
    * @returns {void}
    */
-  *getResultAsArrays() {
-    const pathsSelect = this.db
-      .prepare('SELECT path, ogrn FROM paths WHERE status = ? ORDER BY path LIMIT ? OFFSET ?')
-      .bind('success');
+  *getResultAsArrays(limit = this.pdfObjectsPerArray) {
     yield* this._getResultArrays(
-      pathsSelect,
+      (offset) =>
+        this.db
+          .prepare('SELECT path, ogrn FROM paths WHERE status = ? ORDER BY path LIMIT ? OFFSET ?')
+          .all('success', limit, offset),
       (item) =>
         this.db
           .prepare('SELECT json FROM jsons WHERE path = ? AND ogrn = ?')
-          .get(item.path, item.ogrn).json
+          .get(item.path, item.ogrn).json,
+      limit
     );
   }
 
@@ -264,11 +239,15 @@ class Manager {
    * @desc Writes output files with all json data from jsons table
    * @returns {void}
    */
-  *getAllContentAsArrays() {
-    const jsonSelect = this.db.prepare(
-      'SELECT path, json FROM jsons ORDER BY path, ogrn LIMIT ? OFFSET ?'
+  *getAllContentAsArrays(limit = this.pdfObjectsPerArray) {
+    yield* this._getResultArrays(
+      (offset) =>
+        this.db
+          .prepare('SELECT path, json FROM jsons ORDER BY path, ogrn LIMIT ? OFFSET ?')
+          .all(limit, offset),
+      (item) => item.json,
+      limit
     );
-    yield* this._getResultArrays(jsonSelect, (item) => item.json);
   }
 
   _collectStat() {
@@ -344,7 +323,7 @@ class Manager {
     this._processInputDir();
     await this._parse();
     // this.getResult();
-    for (const item of this.getAllContentAsArrays()) {
+    for (const item of this.getResultAsArrays()) {
       console.log(item);
     }
     this.generateReport();
