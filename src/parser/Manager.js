@@ -49,6 +49,7 @@ class Manager {
     // Clean or not the table with json data before a new portion input files
     // Number of json objects per output file
     this.pdfObjectsPerFile = options.pdfObjectsPerFile || 500;
+    this.pdfObjectsPerArray = options.pdfObjectsPerArray || 2;
     this.cleanDB = options.cleanDB || false;
     this.db = new Database(this.dbPath);
     this._parser = new WorkerPool(resolve(__dirname, 'worker.js'), this.dbPath, 2);
@@ -80,7 +81,7 @@ class Manager {
       .prepare(
         `CREATE TABLE IF NOT EXISTS paths (
              id INTEGER PRIMARY KEY,
-             path TEXT,
+             path TEXT UNIQUE,
              ogrn TEXT DEFAULT NULL,
              status TEXT CHECK(status IN ('raw', 'success', 'error')))`
       )
@@ -158,10 +159,7 @@ class Manager {
   }
 
   async _parse() {
-    const pathArray = this.db
-      .prepare('SELECT DISTINCT path FROM paths WHERE status = ?')
-      .raw()
-      .all('raw');
+    const pathArray = this.db.prepare('SELECT path FROM paths WHERE status = ?').raw().all('raw');
     while (pathArray.length) {
       const paths = pathArray.splice(0, this.pdfLength).flat();
       await this._batchParse(paths);
@@ -228,6 +226,49 @@ class Manager {
   getAllContent() {
     const jsonSelect = this.db.prepare('SELECT path, json FROM jsons');
     this._writeJSONFiles(jsonSelect, (item) => item.json);
+  }
+
+  // Writes json data from jsons tables to output files
+  *_getResultArrays(jsonSelect, getJSON) {
+    let offset = 0;
+    let paths = jsonSelect.all(this.pdfObjectsPerArray, offset);
+    while (paths.length) {
+      offset += this.pdfObjectsPerArray;
+      const dataArray = paths.map((item) => {
+        const data = JSON.parse(getJSON(item));
+        return this.extractData ? this.extractData(item.path, data, true) : data;
+      });
+      yield dataArray;
+      paths = jsonSelect.all(this.pdfObjectsPerArray, offset);
+    }
+  }
+
+  /**
+   * @desc Writes output files with json data for requests completed successfully so far
+   * @returns {void}
+   */
+  *getResultAsArrays() {
+    const pathsSelect = this.db
+      .prepare('SELECT path, ogrn FROM paths WHERE status = ? ORDER BY path LIMIT ? OFFSET ?')
+      .bind('success');
+    yield* this._getResultArrays(
+      pathsSelect,
+      (item) =>
+        this.db
+          .prepare('SELECT json FROM jsons WHERE path = ? AND ogrn = ?')
+          .get(item.path, item.ogrn).json
+    );
+  }
+
+  /**
+   * @desc Writes output files with all json data from jsons table
+   * @returns {void}
+   */
+  *getAllContentAsArrays() {
+    const jsonSelect = this.db.prepare(
+      'SELECT path, json FROM jsons ORDER BY path, ogrn LIMIT ? OFFSET ?'
+    );
+    yield* this._getResultArrays(jsonSelect, (item) => item.json);
   }
 
   _collectStat() {
@@ -302,7 +343,10 @@ class Manager {
   async start() {
     this._processInputDir();
     await this._parse();
-    this.getResult();
+    // this.getResult();
+    for (const item of this.getAllContentAsArrays()) {
+      console.log(item);
+    }
     this.generateReport();
     await this._cleanBeforeFinish();
   }
