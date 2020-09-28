@@ -31,6 +31,7 @@ class Manager {
     this.reportFile = 'report.txt';
     // List of inns, on which some network error occurred and they require re-request
     this.parsingErrorsFile = 'parsingErrors.txt';
+    this.workerFile = 'worker.js';
     this.dbFile = options.dbFile || 'data.db';
     // Directory, where all other directories and files will be created
     this.workingDir = options.workingDir || process.cwd();
@@ -49,10 +50,11 @@ class Manager {
     // Clean or not the table with json data before a new portion input files
     // Number of json objects per output file
     this.pdfObjectsPerFile = options.pdfObjectsPerFile || 500;
-    this.pdfObjectsPerArray = options.pdfObjectsPerArray || 2;
+    this.pdfObjectsPerArray = options.pdfObjectsPerArray || 500;
     this.cleanDB = options.cleanDB || false;
     this.db = new Database(this.dbPath);
-    this._parser = new WorkerPool(resolve(__dirname, 'worker.js'), this.dbPath, 2);
+    this._parser = null;
+    this.numberOfThreads = options.numberOfThreads || null;
     this.logger = new Logger({
       generalErrorPath: resolve(this._logsPath, `generalErrors_${getDate()}.log`),
       parsingErrorPath: resolve(this._logsPath, `parsingErrors_${getDate()}.log`),
@@ -129,6 +131,15 @@ class Manager {
     });
   }
 
+  _initParser() {
+    this._parser = new WorkerPool(
+      resolve(__dirname, this.workerFile),
+      this.dbPath,
+      this.numberOfThreads
+    );
+    this._parser.on('error', (error) => this.logger.log('generalError', error));
+  }
+
   _updateAfterParsing(result) {
     const updateStatus = this.db.prepare('UPDATE paths SET status = ?, ogrn = ? WHERE path = ?');
     if (result.status === 'fulfilled') {
@@ -161,6 +172,7 @@ class Manager {
   }
 
   async _parse() {
+    this._initParser();
     const pathArray = this.db.prepare('SELECT path FROM paths WHERE status = ?').raw().all('raw');
     while (pathArray.length) {
       const paths = pathArray.splice(0, this.pdfLength).flat();
@@ -314,6 +326,8 @@ class Manager {
       await closeStreams(this._streams);
       await this.logger.closeStreams();
       await this._parser.close();
+      this._parser.removeAllListeners('error');
+      this._parser = null;
     } catch (err) {
       console.log(err);
     }
@@ -333,7 +347,7 @@ class Manager {
 
 module.exports = Manager;
 
-const manager = new Manager({ inputDir: 'output', extractData });
+const manager = new Manager({ inputDir: 'output', numberOfThreads: 2, extractData });
 manager.start();
 
 // (async function () {

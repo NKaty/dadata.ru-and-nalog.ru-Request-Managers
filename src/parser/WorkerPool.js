@@ -54,7 +54,6 @@ class WorkerPool extends EventEmitter {
     });
 
     worker.on('error', (err) => {
-      // general errors
       if (worker[kTaskInfo]) worker[kTaskInfo].done(err, null);
       else this.emit('error', err);
       this._removeWorker(i);
