@@ -65,7 +65,7 @@ class Downloader {
     const response = await fetch(url, options);
 
     if (response.ok) json = await response.json();
-    else throw new RequestError('An error occurred during the request.');
+    else throw new RequestError(response.statusText || 'An error occurred during the request.');
 
     if (json && (json.captchaRequired || json.ERRORS))
       throw new StopError('The captcha is required.');
