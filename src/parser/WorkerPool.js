@@ -7,9 +7,10 @@ const kTaskInfo = Symbol('kTaskInfo');
 const kWorkerFreedEvent = Symbol('kWorkerFreedEvent');
 
 class WorkerPoolTaskInfo extends AsyncResource {
-  constructor(callback) {
+  constructor(callback, path) {
     super('WorkerPoolTaskInfo');
     this.callback = callback;
+    this.path = path;
   }
 
   done(err, result) {
@@ -25,9 +26,12 @@ class WorkerPool extends EventEmitter {
     this.workers = {};
     this.activeWorkers = {};
     this.workerPath = workerPath;
-    this.dbPath = dbPath;
     this.numberOfThreads = numberOfThreads || cpus().length;
     this._init();
+  }
+
+  _kWorkerFreedEventHandler(id) {
+    if (this.queue.length) this._runWorker(id);
   }
 
   _init() {
@@ -37,25 +41,28 @@ class WorkerPool extends EventEmitter {
     for (let i = 0; i < this.numberOfThreads; i += 1) {
       this._addNewWorker(i);
     }
-    this.on(kWorkerFreedEvent, (id) => {
-      if (this.queue.length) this._runWorker(id);
-    });
+    this.on(kWorkerFreedEvent, this._kWorkerFreedEventHandler);
   }
 
   _addNewWorker(i) {
-    const worker = new Worker(this.workerPath, { workerData: { db: this.dbPath } });
+    const worker = new Worker(this.workerPath);
 
     worker.on('message', (result) => {
-      if (result.status === 'success') worker[kTaskInfo].done(null, result);
-      else worker[kTaskInfo].done(result, null);
+      const data = { ...result, path: worker[kTaskInfo].path };
+      if (result.status === 'success') worker[kTaskInfo].done(null, data);
+      else worker[kTaskInfo].done(data, null);
       worker[kTaskInfo] = null;
       this.activeWorkers[i] = false;
       this.emit(kWorkerFreedEvent, i);
     });
 
-    worker.on('error', (err) => {
-      if (worker[kTaskInfo]) worker[kTaskInfo].done(err, null);
-      else this.emit('error', err);
+    worker.on('error', (error) => {
+      if (worker[kTaskInfo]) {
+        const data = { status: 'error', error, path: worker[kTaskInfo].path };
+        worker[kTaskInfo].done(data, null);
+      } else {
+        this.emit('error', error);
+      }
       this._removeWorker(i);
       this._addNewWorker(i);
     });
@@ -81,15 +88,15 @@ class WorkerPool extends EventEmitter {
     if (queueItem === null) queueItem = this.queue.shift();
     const worker = this.workers[workerId];
     this.activeWorkers[workerId] = true;
-    worker[kTaskInfo] = new WorkerPoolTaskInfo(queueItem.callback);
-    worker.postMessage(queueItem.data);
+    worker[kTaskInfo] = new WorkerPoolTaskInfo(queueItem.callback, queueItem.path);
+    worker.postMessage(queueItem.path);
   }
 
-  run(data) {
+  run(path) {
     return new Promise((resolve, reject) => {
       const availableWorkerId = this.getInactiveWorker();
       const queueItem = {
-        data,
+        path,
         callback: (error, result) => {
           if (error) return reject(error);
           return resolve(result);
@@ -103,7 +110,8 @@ class WorkerPool extends EventEmitter {
     });
   }
 
-  async close() {
+  async clean() {
+    this.off(kWorkerFreedEvent, this._kWorkerFreedEventHandler);
     await Promise.allSettled(Object.values(this.workers).map((worker) => worker.terminate()));
   }
 }
