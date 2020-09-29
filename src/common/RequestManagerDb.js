@@ -141,9 +141,9 @@ class RequestManagerDb extends BaseRequestManagerDb {
           if (lineCount === 0 && itemIndex === 0)
             this._successOutputStream.write(`\n${JSON.stringify(this._extractData(item))}`);
           else this._successOutputStream.write(`,\n${JSON.stringify(this._extractData(item))}`);
+          lineCount += 1;
         });
       }
-      lineCount += 1;
     }
 
     this._successOutputStream.end('\n]\n');
@@ -197,11 +197,10 @@ class RequestManagerDb extends BaseRequestManagerDb {
       await this._processInput();
       await this._requests();
       this._getResult();
-      this.generateReport();
-      await this._cleanBeforeFinish();
     } catch (err) {
       this.logger.log('generalError', err);
-      await this.generateReport();
+    } finally {
+      this.generateReport();
       await this._cleanBeforeFinish();
     }
   }

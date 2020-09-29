@@ -310,12 +310,8 @@ ${this._isStopErrorOccurred ? this._stopErrorMessage : ''}
   }
 
   async _cleanBeforeFinish() {
-    try {
-      await closeStreams(this._streams);
-      await this.logger.closeStreams();
-    } catch (err) {
-      console.log(err);
-    }
+    await closeStreams(this._streams);
+    await this.logger.closeStreams();
   }
 
   /**
@@ -326,11 +322,10 @@ ${this._isStopErrorOccurred ? this._stopErrorMessage : ''}
     try {
       await this._processInput();
       await this._requests();
-      this.generateReport();
-      await this._cleanBeforeFinish();
     } catch (err) {
       this.logger.log('generalError', err);
-      await this.generateReport();
+    } finally {
+      this.generateReport();
       await this._cleanBeforeFinish();
     }
   }

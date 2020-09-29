@@ -515,12 +515,8 @@ ${
       this._validationErrorStream,
     ];
 
-    try {
-      await closeStreams(streams);
-      await this.logger.closeStreams();
-    } catch (err) {
-      console.log(err);
-    }
+    await closeStreams(streams);
+    await this.logger.closeStreams();
   }
 
   /**
@@ -538,12 +534,11 @@ ${
       if (currentFiles.length) {
         // Make requests
         await this._requests(currentFiles);
-        await this._generateReport();
-        await this._cleanBeforeFinish();
         // Otherwise, if error file exist, restart with error file
       } else if (existsSync(this._mainTempErrorsPath)) await this.start(true);
     } catch (err) {
       this.logger.log('generalError', err);
+    } finally {
       await this._generateReport();
       await this._cleanBeforeFinish();
     }
