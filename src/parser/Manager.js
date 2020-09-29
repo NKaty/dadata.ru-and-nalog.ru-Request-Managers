@@ -84,8 +84,7 @@ class Manager {
     this.db
       .prepare(
         `CREATE TABLE IF NOT EXISTS paths (
-             id INTEGER PRIMARY KEY,
-             path TEXT UNIQUE,
+             path TEXT PRIMARY KEY,
              ogrn TEXT DEFAULT NULL,
              status TEXT CHECK(status IN ('raw', 'success', 'error')))`
       )
@@ -172,7 +171,6 @@ class Manager {
   }
 
   async _parse() {
-    this._initParser();
     const pathArray = this.db.prepare('SELECT path FROM paths WHERE status = ?').raw().all('raw');
     while (pathArray.length) {
       const paths = pathArray.splice(0, this.pdfLength).flat();
@@ -322,26 +320,24 @@ class Manager {
   }
 
   async _cleanBeforeFinish() {
-    try {
-      await closeStreams(this._streams);
-      await this.logger.closeStreams();
-      await this._parser.close();
-      this._parser.removeAllListeners('error');
-      this._parser = null;
-    } catch (err) {
-      console.log(err);
-    }
+    await closeStreams(this._streams);
+    await this.logger.closeStreams();
+    await this._parser.clean();
+    this._parser.removeAllListeners('error');
+    this._parser = null;
   }
 
   async start() {
-    this._processInputDir();
-    await this._parse();
-    // this.getResult();
-    for (const item of this.getResultAsArrays()) {
-      console.log(item);
+    try {
+      this._processInputDir();
+      this._initParser();
+      await this._parse();
+    } catch (err) {
+      this.logger.log('generalError', err);
+    } finally {
+      this.generateReport();
+      await this._cleanBeforeFinish();
     }
-    this.generateReport();
-    await this._cleanBeforeFinish();
   }
 }
 
