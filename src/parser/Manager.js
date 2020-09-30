@@ -14,7 +14,7 @@ const Database = require('better-sqlite3');
 const WorkerPool = require('./WorkerPool');
 const Logger = require('../common/Logger');
 const { closeStreams, getDate, cleanDir } = require('../common/helpers');
-const extractData = require('./extractData');
+// const extractData = require('./extractData');
 
 class Manager {
   constructor(options) {
@@ -55,28 +55,28 @@ class Manager {
     this.db = new Database(this.dbPath);
     this._parser = null;
     this.numberOfThreads = options.numberOfThreads || null;
-    this.logger = new Logger({
-      generalErrorPath: resolve(this._logsPath, `generalErrors_${getDate()}.log`),
-      parsingErrorPath: resolve(this._logsPath, `parsingErrors_${getDate()}.log`),
-      successPath: resolve(this._logsPath, `success_${getDate()}.log`),
-    });
+    this.logger = null;
     this.extractData = options.extractData || null;
     this.getResultAsArrays = this.getResultAsArrays.bind(this);
     this.getAllContentAsArrays = this.getAllContentAsArrays.bind(this);
-    this._init();
-  }
-
-  _init() {
     this._createDirStructure();
     this._createDb();
-    this._prepareDb();
-    this._cleanBeforeStart();
   }
 
   _createDirStructure() {
     if (!existsSync(this._outputPath)) mkdirSync(this._outputPath);
     if (!existsSync(this._logsPath)) mkdirSync(this._logsPath);
     if (!existsSync(this._reportsPath)) mkdirSync(this._reportsPath);
+  }
+
+  _initLogger() {
+    if (!this.logger) {
+      this.logger = new Logger({
+        generalErrorPath: resolve(this._logsPath, `generalErrors_${getDate()}.log`),
+        parsingErrorPath: resolve(this._logsPath, `parsingErrors_${getDate()}.log`),
+        successPath: resolve(this._logsPath, `success_${getDate()}.log`),
+      });
+    }
   }
 
   _createDb() {
@@ -123,6 +123,9 @@ class Manager {
     // If there are no files to process, go to make requests by inns (if there are unprocessed requests)
     if (!inputPaths.length) return;
 
+    this._prepareDb();
+    this._cleanBeforeStart();
+
     inputPaths.forEach((path) => {
       this.db
         .prepare('INSERT INTO paths (path, status) VALUES (?, ?)')
@@ -131,12 +134,14 @@ class Manager {
   }
 
   _initParser() {
-    this._parser = new WorkerPool(
-      resolve(__dirname, this.workerFile),
-      this.dbPath,
-      this.numberOfThreads
-    );
-    this._parser.on('error', (error) => this.logger.log('generalError', error));
+    if (!this._parser) {
+      this._parser = new WorkerPool(
+        resolve(__dirname, this.workerFile),
+        this.dbPath,
+        this.numberOfThreads
+      );
+      this._parser.on('error', (error) => this.logger.log('generalError', error));
+    }
   }
 
   _updateAfterParsing(result) {
@@ -315,13 +320,15 @@ class Manager {
       this.writeReport();
       this.writeErrors();
     } catch (err) {
-      this.logger.log('generalError', err);
+      if (this.logger) this.logger.log('generalError', err);
+      else console.log(err);
     }
   }
 
   async _cleanBeforeFinish() {
     await closeStreams(this._streams);
     await this.logger.closeStreams();
+    this.logger = null;
     await this._parser.clean();
     this._parser.removeAllListeners('error');
     this._parser = null;
@@ -329,11 +336,13 @@ class Manager {
 
   async start() {
     try {
+      this._initLogger();
       this._processInputDir();
       this._initParser();
       await this._parse();
     } catch (err) {
-      this.logger.log('generalError', err);
+      if (this.logger) this.logger.log('generalError', err);
+      else console.log(err);
     } finally {
       this.generateReport();
       await this._cleanBeforeFinish();
@@ -343,8 +352,9 @@ class Manager {
 
 module.exports = Manager;
 
-const manager = new Manager({ inputDir: 'output', numberOfThreads: 2, extractData });
+const manager = new Manager({ inputDir: 'output', numberOfThreads: 2 });
 manager.start();
+// manager.generateReport();
 
 // (async function () {
 //   const times = [];
