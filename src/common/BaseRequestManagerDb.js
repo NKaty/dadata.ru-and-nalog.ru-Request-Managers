@@ -309,7 +309,11 @@ ${this._isStopErrorOccurred ? this._stopErrorMessage : ''}
     }
   }
 
-  async _cleanBeforeFinish() {
+  /**
+   * @desc Close the streams, open during execution
+   * @returns {Promise} - Promise object represents void
+   */
+  async cleanBeforeFinish() {
     await closeStreams(this._streams);
     await this.logger.closeStreams();
   }
@@ -326,7 +330,7 @@ ${this._isStopErrorOccurred ? this._stopErrorMessage : ''}
       this.logger.log('generalError', err);
     } finally {
       this.generateReport();
-      await this._cleanBeforeFinish();
+      await this.cleanBeforeFinish();
     }
   }
 }

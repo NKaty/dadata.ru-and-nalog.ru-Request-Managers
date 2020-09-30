@@ -13,7 +13,9 @@ manager.start().catch(console.log);
 // If for some reasons not all requests were successful
 // and you want to write into output files json objects received so far
 // manager.getCurrentResult();
+// manager.cleanBeforeFinish().catch(console.log);
 
 // You have used the script several cycles (by putting new input files) and accumulated data
 // in the database and now you want to get all the data from the database
 // manager.getAllContent();
+// manager.cleanBeforeFinish().catch(console.log);

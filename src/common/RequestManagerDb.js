@@ -201,7 +201,7 @@ class RequestManagerDb extends BaseRequestManagerDb {
       this.logger.log('generalError', err);
     } finally {
       this.generateReport();
-      await this._cleanBeforeFinish();
+      await this.cleanBeforeFinish();
     }
   }
 }
