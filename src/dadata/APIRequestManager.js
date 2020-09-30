@@ -185,7 +185,7 @@ class APIRequestManager {
         const stat = statSync(resolve(currentDir, file));
         // Select if it is a file and its name doesn't start with _
         // If a file name starts with _, it means it is was processed before
-        return stat.isFile() && file[0] !== '_';
+        return stat.isFile() && file[0] !== '_' && file.endsWith('.txt');
       });
       // If there are no files to process, go to make requests
       if (!currentPaths.length) return;
