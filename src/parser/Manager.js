@@ -184,6 +184,26 @@ class Manager {
     // console.timeEnd('time');
   }
 
+  _updatePromise(results) {
+    return new Promise((resolve) => {
+      setImmediate(() => {
+        results.forEach((result) => this._updateAfterParsing(result));
+        resolve();
+      });
+    });
+  }
+
+  async _parseAsync() {
+    const pathArray = this.db.prepare('SELECT path FROM paths WHERE status = ?').raw().all('raw');
+    while (pathArray.length) {
+      const paths = pathArray.splice(0, this.pdfLength).flat();
+      const results = await Promise.allSettled(paths.map((path) => this._parser.run(path)));
+      if (pathArray.length) this._updatePromise(results);
+      else await this._updatePromise(results);
+    }
+    // console.timeEnd('time');
+  }
+
   // Writes json data from jsons tables to output files
   _writeJSONFiles(getResultArraysGen) {
     let fileCount = 1;
