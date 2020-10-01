@@ -34,9 +34,14 @@ const cleanDir = (dir) => {
  */
 const closeStreams = async (streams) => {
   const streamPromises = streams.map((stream) => {
-    if (stream) {
-      stream.end();
-      return new Promise((resolve) => stream.on('close', resolve));
+    if (stream && !stream.writableEnded) {
+      return new Promise((resolve) => {
+        stream.once('close', () => {
+          resolve();
+          stream.removeAllListeners('close');
+        });
+        stream.end();
+      });
     }
     return Promise.resolve();
   });
