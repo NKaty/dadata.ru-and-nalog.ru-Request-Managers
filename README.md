@@ -116,10 +116,12 @@ manager.start().catch(console.log);
 // so request process will take some days,
 // and if you want to write into output files json objects received so far
 manager.getCurrentResult();
+manager.cleanBeforeFinish().catch(console.log);
 
 // You have used the script several cycles (by putting new input files) and accumulated data
 // in the database and now you want to get all the data from the database
 manager.getAllContent();
+manager.cleanBeforeFinish().catch(console.log);
 ```
 ## nalog.ru Классы
 #### Downloader
@@ -228,10 +230,12 @@ manager.start().catch(console.log);
 // If for some reasons not all requests were successful
 // and you want to write into output files json objects received so far
 manager.getCurrentResult();
+manager.cleanBeforeFinish().catch(console.log);
 
 // You have used the script several cycles (by putting new input files) and accumulated data
 // in the database and now you want to get all the data from the database
 manager.getAllContent();
+manager.cleanBeforeFinish().catch(console.log);
 ```
 #### PDFRequestManagerDb
 Позволяет управлять процессом скачивания выписок из ЕГРЮЛ и ЕГРИП по ИНН с помощью sqlite базы данных, в том числе читать ИНН из файлов, делать поиск, скачивать найденные выписки, логировать ошибки и успешные скачивания (с помощью класса Logger), получать отчеты о выполненных скачиваниях.
@@ -342,10 +346,6 @@ Gets information about the companies found by query parameters
 Launches the request process
 
 **Returns**: <code>Promise</code> - Promise object represents void  
-
-| Param | Type | Default | Description |
-| --- | --- | --- | --- |
-| [checkingErrors] | <code>boolean</code> | <code>false</code> | process either input files or error files |
 
 ### Class: APIRequestManagerDb
 #### new APIRequestManagerDb([options])
