@@ -26,7 +26,7 @@ class Logger {
       generalError: options.generalErrorPath || null,
       success: options.successPath || null,
     };
-    this._steamTypes = {
+    this._streamTypes = {
       retryError: null,
       validationError: null,
       generalError: null,
@@ -37,9 +37,9 @@ class Logger {
   // Gets a proper stream
   _getStream(type) {
     if (!type || !this._pathTypes[type]) type = 'generalError';
-    if (this._steamTypes[type] === null)
-      this._steamTypes[type] = createWriteStream(this._pathTypes[type], { flags: this.mode });
-    return this._steamTypes[type];
+    if (this._streamTypes[type] === null)
+      this._streamTypes[type] = createWriteStream(this._pathTypes[type], { flags: this.mode });
+    return this._streamTypes[type];
   }
 
   /**
@@ -68,7 +68,8 @@ class Logger {
    */
   async closeStreams() {
     try {
-      await closeStreams(Object.values(this._steamTypes));
+      await closeStreams(Object.values(this._streamTypes));
+      Object.keys(this._streamTypes).forEach((key) => (this._streamTypes[key] = null));
     } catch (err) {
       console.log(err);
     }

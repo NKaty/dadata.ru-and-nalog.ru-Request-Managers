@@ -140,6 +140,7 @@ class APIRequestManager {
       validationErrorPath: resolve(this._logsPath, `validationErrors_${getDate()}.log`),
       generalErrorPath: resolve(this._logsPath, `generalErrors_${getDate()}.log`),
       successPath: resolve(this._logsPath, `success_${getDate()}.log`),
+      mode: 'a',
     });
     // Use instance of APIMultiCaller class to make requests
     this.apiMultiCaller = new APIMultiCaller({ logger: this.logger });
@@ -313,8 +314,7 @@ class APIRequestManager {
         this._isStopErrorOccurred = !!stopErrors.length;
         if (this._successOutputStream) {
           // Close output stream
-          this._successOutputStream.end();
-          await new Promise((resolve) => this._successOutputStream.on('close', resolve));
+          await closeStreams([this._successOutputStream]);
           // Remove output file, as a temporary file prepared for requesting is treated as a unit,
           // that can be either fully processed or not processed at all
           existsSync(resolve(this._outputPath, outputFileName)) &&
@@ -389,10 +389,7 @@ class APIRequestManager {
       await this._request(resolve(this._tempInputPath, file));
     }
 
-    if (this._tempErrorStream) {
-      this._tempErrorStream.end();
-      await new Promise((resolve) => this._tempErrorStream.on('close', resolve));
-    }
+    await closeStreams([this._tempErrorStream]);
   }
 
   // Gets temporary files prepared for requesting to process today
@@ -488,58 +485,81 @@ ${
   }
 
   // Writes date into validation error file
-  async _writeDateToValidationErrors() {
+  _writeDateToValidationErrors() {
     if (this._validationErrorStream) {
-      this._validationErrorStream.end(`Отчет сформирован: ${getDate(true)}\n\n`);
-      await new Promise((resolve) => this._validationErrorStream.on('close', resolve));
+      this._validationErrorStream.write(`Отчет сформирован: ${getDate(true)}\n\n`);
     }
   }
 
   // Writes reports with statistics and errors
-  async _generateReport() {
+  _generateReport() {
     try {
       const stat = this._updateStat();
       this._writeReport(stat);
       this._writeErrorsToRetry();
-      await this._writeDateToValidationErrors();
+      this._writeDateToValidationErrors();
     } catch (err) {
       this.logger.log('generalError', err);
     }
   }
 
-  async _cleanBeforeFinish() {
-    const streams = [
-      this._tempInputStream,
-      this._successOutputStream,
-      this._tempErrorStream,
-      this._validationErrorStream,
-    ];
+  _reset() {
+    this._repeatedFailure = false;
+    this._stop = false;
+    this._isStopErrorOccurred = false;
+    this._firstJSON = true;
+    this._newCycle = false;
+    this._totalRequestNumber = 0;
+    this._currentRequestNumber = 0;
+    this._successNumber = 0;
+    this._validationErrorsNumber = 0;
+    this._retryErrorsNumber = 0;
+    this._tempInputStream = null;
+    this._successOutputStream = null;
+    this._tempErrorStream = null;
+    this._validationErrorStream = null;
+  }
 
-    await closeStreams(streams);
-    await this.logger.closeStreams();
+  async _cleanBeforeFinish() {
+    try {
+      const streams = [
+        this._tempInputStream,
+        this._successOutputStream,
+        this._tempErrorStream,
+        this._validationErrorStream,
+      ];
+      await closeStreams(streams);
+      await this.logger.closeStreams();
+      this._reset();
+    } catch (err) {
+      console.log(err);
+    }
+  }
+
+  async _start(checkingErrors = false) {
+    // Get temporary files prepared for requesting
+    await this._processInput(checkingErrors);
+    // Pick some temporary files to process today
+    const currentFiles = this._getCurrentFiles();
+    // If such files exist
+    if (currentFiles.length) {
+      // Make requests
+      await this._requests(currentFiles);
+      // Otherwise, if error file exist, restart with error file
+    } else if (existsSync(this._mainTempErrorsPath)) await this._start(true);
   }
 
   /**
    * @desc Launches the request process
-   * @param {boolean} [checkingErrors=false] - process either input files or error files
    * @returns {Promise} - Promise object represents void
    */
-  async start(checkingErrors = false) {
+  async start() {
     try {
-      // Get temporary files prepared for requesting
-      await this._processInput(checkingErrors);
-      // Pick some temporary files to process today
-      const currentFiles = this._getCurrentFiles();
-      // If such files exist
-      if (currentFiles.length) {
-        // Make requests
-        await this._requests(currentFiles);
-        // Otherwise, if error file exist, restart with error file
-      } else if (existsSync(this._mainTempErrorsPath)) await this.start(true);
+      await this._start();
     } catch (err) {
       this.logger.log('generalError', err);
     } finally {
-      await this._generateReport();
+      this._generateReport();
       await this._cleanBeforeFinish();
     }
   }

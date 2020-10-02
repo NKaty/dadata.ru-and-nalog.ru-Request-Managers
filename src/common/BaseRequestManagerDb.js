@@ -74,9 +74,7 @@ class BaseRequestManagerDb {
     this._mainReportPath = resolve(this._reportsPath, this.reportFile);
     this._errorsToRetryPath = resolve(this._reportsPath, this.errorsToRetryFile);
     this._validationErrorsPath = resolve(this._reportsPath, this.validationErrorsFile);
-    this._validationErrorStream = null;
-    this._retryErrorStream = null;
-    this._streams = [this._validationErrorStream, this._retryErrorStream];
+    this._streams = { validationErrorStream: null, retryErrorStream: null };
     // Number of requests simultaneously sent and processed
     this.requestsLength = options.requestsLength || 100;
     // Failure rate to wait before making a next request if the failure rate was exceeded
@@ -98,6 +96,7 @@ class BaseRequestManagerDb {
       validationErrorPath: resolve(this._logsPath, `validationErrors_${this._getDate()}.log`),
       generalErrorPath: resolve(this._logsPath, `generalErrors_${this._getDate()}.log`),
       successPath: resolve(this._logsPath, `success_${this._getDate()}.log`),
+      mode: 'a',
     });
     this._makeRequests = null;
     this._createDirStructure();
@@ -278,19 +277,21 @@ ${this._isStopErrorOccurred ? this._stopErrorMessage : ''}
     const retryErrors = selectErrors.raw().all('retry').flat();
 
     if (validationErrors.length) {
-      if (!this._validationErrorStream)
-        this._validationErrorStream = createWriteStream(this._validationErrorsPath);
-      validationErrors.forEach((inn) => this._validationErrorStream.write(`${inn}\n`));
-      this._validationErrorStream.end(`Отчет сформирован: ${this._getDate(true)}\n`);
+      if (!this._streams.validationErrorStream) {
+        this._streams.validationErrorStream = createWriteStream(this._validationErrorsPath);
+      }
+      validationErrors.forEach((inn) => this._streams.validationErrorStream.write(`${inn}\n`));
+      this._streams.validationErrorStream.end(`Отчет сформирован: ${this._getDate(true)}\n`);
     } else {
       if (existsSync(this._validationErrorsPath)) unlinkSync(this._validationErrorsPath);
     }
 
     if (retryErrors.length) {
-      if (!this._retryErrorStream)
-        this._retryErrorStream = createWriteStream(this._errorsToRetryPath);
-      retryErrors.forEach((inn) => this._retryErrorStream.write(`${inn}\n`));
-      this._retryErrorStream.end(`Отчет сформирован: ${this._getDate(true)}\n`);
+      if (!this._streams.retryErrorStream) {
+        this._streams.retryErrorStream = createWriteStream(this._errorsToRetryPath);
+      }
+      retryErrors.forEach((inn) => this._streams.retryErrorStream.write(`${inn}\n`));
+      this._streams.retryErrorStream.end(`Отчет сформирован: ${this._getDate(true)}\n`);
     } else {
       if (existsSync(this._errorsToRetryPath)) unlinkSync(this._errorsToRetryPath);
     }
@@ -309,13 +310,26 @@ ${this._isStopErrorOccurred ? this._stopErrorMessage : ''}
     }
   }
 
+  _reset() {
+    this._repeatedFailure = false;
+    this._stop = false;
+    this._isStopErrorOccurred = false;
+    this._stopErrorMessage = '';
+    Object.keys(this._streams).forEach((key) => (this._streams[key] = null));
+  }
+
   /**
    * @desc Close the streams, open during execution
    * @returns {Promise} - Promise object represents void
    */
   async cleanBeforeFinish() {
-    await closeStreams(this._streams);
-    await this.logger.closeStreams();
+    try {
+      await closeStreams(Object.values(this._streams));
+      await this.logger.closeStreams();
+      this._reset();
+    } catch (err) {
+      console.log(err);
+    }
   }
 
   /**

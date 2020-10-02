@@ -48,12 +48,7 @@ class RequestManagerDb extends BaseRequestManagerDb {
       throw new TypeError('You cannot instantiate RequestManagerDb class directly');
 
     super(options);
-    this._successOutputStream = null;
-    this._streams = [
-      this._validationErrorStream,
-      this._retryErrorStream,
-      this._successOutputStream,
-    ];
+    this._streams = { ...this._streams, successOutputStream: null };
     // Clean or not the table with json data before a new portion input files
     this.cleanDB = options.cleanDB || false;
     // If the table with json data was not cleaned and json data for certain inns already exist,
@@ -117,36 +112,40 @@ class RequestManagerDb extends BaseRequestManagerDb {
   _writeJSONFiles(jsonSelect, getJSON) {
     let fileCount = 1;
     let lineCount = 0;
-    this._successOutputStream = createWriteStream(
+    this._streams.successOutputStream = createWriteStream(
       resolve(this._outputPath, `${this._getDate()}_${fileCount}.json`)
     );
-    this._successOutputStream.write('[');
+    this._streams.successOutputStream.write('[');
 
     for (const item of jsonSelect.iterate()) {
       // If number of json objects in a file equals or greater than this.innPerFile,
       // start a new output file
       if (lineCount >= this.innPerFile) {
         lineCount = 0;
-        this._successOutputStream.end('\n]\n');
+        this._streams.successOutputStream.end('\n]\n');
         fileCount += 1;
-        this._successOutputStream = createWriteStream(
+        this._streams.successOutputStream = createWriteStream(
           resolve(this._outputPath, `${this._getDate()}_${fileCount}.json`)
         );
-        this._successOutputStream.write('[');
+        this._streams.successOutputStream.write('[');
       }
       const json = getJSON(item);
       if (json !== undefined) {
         const items = JSON.parse(json);
         items.forEach((item, itemIndex) => {
-          if (lineCount === 0 && itemIndex === 0)
-            this._successOutputStream.write(`\n${JSON.stringify(this._extractData(item))}`);
-          else this._successOutputStream.write(`,\n${JSON.stringify(this._extractData(item))}`);
+          if (lineCount === 0 && itemIndex === 0) {
+            this._streams.successOutputStream.write(`\n${JSON.stringify(this._extractData(item))}`);
+          } else {
+            this._streams.successOutputStream.write(
+              `,\n${JSON.stringify(this._extractData(item))}`
+            );
+          }
           lineCount += 1;
         });
       }
     }
 
-    this._successOutputStream.end('\n]\n');
+    this._streams.successOutputStream.end('\n]\n');
   }
 
   /**
