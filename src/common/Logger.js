@@ -4,7 +4,7 @@
  **/
 
 const { createWriteStream } = require('fs');
-const { closeStreams } = require('./helpers');
+const { getDate, closeStreams } = require('./helpers');
 
 class Logger {
   /**
@@ -55,8 +55,11 @@ class Logger {
       const info = args.length ? `${args.join(', ')} ` : '';
       const stream = this._getStream(type);
       if (message instanceof Error) console.log(`${info}${message.stack}`);
-      if (type === 'generalError' && stream) stream.write(`${info}${message.stack}\n`);
-      else stream && stream.write(`${info}${message}\n`);
+      if (type === 'generalError' && stream) {
+        stream.write(`${getDate(true)} ${info}${message.stack}\n`);
+      } else {
+        stream && stream.write(`${getDate(true)} ${info}${message}\n`);
+      }
     } catch (err) {
       console.log(err);
     }
