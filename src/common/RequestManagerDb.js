@@ -186,22 +186,9 @@ class RequestManagerDb extends BaseRequestManagerDb {
     this._writeJSONFiles(jsonSelect, (item) => item.json);
   }
 
-  /**
-   * @desc Launches the download process
-   * @returns {Promise} - Promise object represents void
-   * @override
-   */
-  async start() {
-    try {
-      await this._processInput();
-      await this._requests();
-      this._getResult();
-    } catch (err) {
-      this.logger.log('generalError', err);
-    } finally {
-      this.generateReport();
-      await this.cleanBeforeFinish();
-    }
+  async _start() {
+    await super._start();
+    this._getResult();
   }
 }
 

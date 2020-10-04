@@ -89,6 +89,10 @@ class BaseRequestManagerDb {
     this._stop = false;
     this._isStopErrorOccurred = false;
     this._stopErrorMessage = '';
+    // Allows to check on manager instance whether the request process has ended with request errors
+    this.endedWithRetryErrors = false;
+    // Allows to check on manager instance whether the request process has ended with stop error
+    this.endedWithStopError = false;
     this.db = new Database(resolve(this.workingDir, this.dbFile));
     this._getDate = getDate;
     this.logger = new Logger({
@@ -129,6 +133,11 @@ class BaseRequestManagerDb {
   _cleanBeforeStart() {
     cleanDir(this._reportsPath);
     cleanDir(this._logsPath);
+  }
+
+  _setBeforeStart() {
+    this.endedWithRetryErrors = false;
+    this.endedWithStopError = false;
   }
 
   // Makes necessary checks and insert inn into into requests table
@@ -247,12 +256,16 @@ class BaseRequestManagerDb {
     };
   }
 
+  _setErrorsState(stat) {
+    this.endedWithRetryErrors = !!stat.requestErrors;
+    this.endedWithStopError = this._isStopErrorOccurred;
+  }
+
   /**
    * @desc Writes a report with statistics on downloads
    * @returns {void}
    */
-  writeReport() {
-    const stat = this._collectStat();
+  writeReport(stat) {
     const report = `Общее количество ИНН: ${stat.requests}
   из них повторяется: ${stat.requests - stat.distinctRequests}
 Выполнено запросов: ${stat.success + stat.validationErrors + stat.requestErrors}
@@ -303,7 +316,9 @@ ${this._isStopErrorOccurred ? this._stopErrorMessage : ''}
    */
   generateReport() {
     try {
-      this.writeReport();
+      const stat = this._collectStat();
+      this.writeReport(stat);
+      this._setErrorsState(stat);
       this.writeErrors();
     } catch (err) {
       this.logger.log('generalError', err);
@@ -332,14 +347,19 @@ ${this._isStopErrorOccurred ? this._stopErrorMessage : ''}
     }
   }
 
+  async _start() {
+    this._setBeforeStart();
+    await this._processInput();
+    await this._requests();
+  }
+
   /**
    * @desc Launches the download process
    * @returns {Promise} - Promise object represents void
    */
   async start() {
     try {
-      await this._processInput();
-      await this._requests();
+      await this._start();
     } catch (err) {
       this.logger.log('generalError', err);
     } finally {

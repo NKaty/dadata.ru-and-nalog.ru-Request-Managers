@@ -125,6 +125,10 @@ class APIRequestManager {
     // Time in milliseconds to wait before making a next request
     // if the failure rate was exceeded for the first time
     this.timeToWaitBeforeNextAttempt = options.timeToWaitBeforeNextAttempt || 30 * 60 * 1000;
+    // Allows to check on manager instance whether the request process has ended with request errors
+    this.endedWithRetryErrors = false;
+    // Allows to check on manager instance whether the request process has ended with stop error
+    this.endedWithStopError = false;
     this._repeatedFailure = false;
     this._stop = false;
     this._isStopErrorOccurred = false;
@@ -169,6 +173,11 @@ class APIRequestManager {
     cleanDir(this._tempInputPath);
     // remove previous file with inns to retry if for some reason it was not processed
     cleanDir(this._tempErrorsPath);
+  }
+
+  _setBeforeStart() {
+    this.endedWithRetryErrors = false;
+    this.endedWithStopError = false;
   }
 
   // Divides input and error files into temporary files prepared for requesting,
@@ -453,9 +462,13 @@ class APIRequestManager {
     return requestInfo;
   }
 
+  _setErrorsState(requestInfo) {
+    this.endedWithRetryErrors = !!requestInfo.retryErrors;
+    this.endedWithStopError = this._isStopErrorOccurred;
+  }
+
   // Writes a report with statistics on requests
-  _writeReport(stat) {
-    const requestInfo = this._processStat(stat);
+  _writeReport(stat, requestInfo) {
     const report = `Общее количество ИНН: ${stat.totalRequestNumber}
 Выполнено запросов: ${requestInfo.requests}
   успешных: ${requestInfo.success}
@@ -495,7 +508,9 @@ ${
   _generateReport() {
     try {
       const stat = this._updateStat();
-      this._writeReport(stat);
+      const requestInfo = this._processStat(stat);
+      this._writeReport(stat, requestInfo);
+      this._setErrorsState(requestInfo);
       this._writeErrorsToRetry();
       this._writeDateToValidationErrors();
     } catch (err) {
@@ -537,6 +552,7 @@ ${
   }
 
   async _start(checkingErrors = false) {
+    if (!checkingErrors) this._setBeforeStart();
     // Get temporary files prepared for requesting
     await this._processInput(checkingErrors);
     // Pick some temporary files to process today
