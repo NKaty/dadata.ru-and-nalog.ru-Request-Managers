@@ -334,7 +334,7 @@ ${this._isStopErrorOccurred ? this._stopErrorMessage : ''}
   }
 
   /**
-   * @desc Close the streams, open during execution
+   * @desc Cleans after the request process
    * @returns {Promise} - Promise object represents void
    */
   async cleanBeforeFinish() {
@@ -354,7 +354,7 @@ ${this._isStopErrorOccurred ? this._stopErrorMessage : ''}
   }
 
   /**
-   * @desc Launches the download process
+   * @desc Launches the request process
    * @returns {Promise} - Promise object represents void
    */
   async start() {
