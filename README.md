@@ -79,6 +79,15 @@ apiCaller
 
 [Примеры использования](src/dadata/examples/apiRequestManager.js)
 ```javascript
+// Run the script for the first time to create directory structure,
+// then put files with inns into input directory and run the script again.
+// Or you can create input directory in your workingDir,
+// put files with inns there and run the script.
+// The APIRequestManager is designed to save the state between runs.
+// So if you have more than 10000 requests to make or you want to retry request errors,
+// you can run the script multiple times (for example, using a scheduler),
+// each time instantiating APIRequestManager class again.
+
 const Manager = require('../APIRequestManager');
 
 const workingDir = process.argv[2];
@@ -86,11 +95,18 @@ const workingDir = process.argv[2];
 // You must have dadata.ru token
 const manager = new Manager({ workingDir, token: 'your token here' });
 
-// Run the script for the first time to create directory structure,
-// then put files with inns into input directory and run the script again
-// Or you can create input directory in your workingDir,
-// put files with inns there and run the script
 manager.start().catch(console.log);
+
+// Or you can run start method multiple times and check errors
+// with help of endedWithRetryErrors and endedWithStopError properties
+(async function () {
+  let doStart = true;
+  while (doStart) {
+    await manager.start();
+    if (manager.endedWithStopError) return;
+    doStart = manager.endedWithRetryErrors;
+  }
+})();
 ```
 #### APIRequestManagerDb
 Позволяет управлять запросами к api по ИНН организаций с помощью sqlite базы данных, в том числе читать ИНН из файлов, делать запросы к api, записывать полученные данные в json файлы, логировать ошибки и успешные запросы (с помощью класса Logger), получать отчеты о выполненных запросах.
@@ -98,6 +114,15 @@ manager.start().catch(console.log);
 
 [Примеры использования](src/dadata/examples/apiRequestManagerDb.js)
 ```javascript
+// Run the script for the first time to create directory structure,
+// then put files with inns into input directory and run the script again.
+// Or you can create input directory in your workingDir,
+// put files with inns there and run the script.
+// The APIRequestManagerDb is designed to save the state between runs.
+// So if you have more than 10000 requests to make or you want to retry request errors,
+// you can run the script multiple times (for example, using a scheduler),
+// each time instantiating APIRequestManagerDb class again.
+
 const Manager = require('../APIRequestManagerDb');
 
 const workingDir = process.argv[2];
@@ -105,11 +130,18 @@ const workingDir = process.argv[2];
 // You must have dadata.ru token
 const manager = new Manager({ workingDir, token: 'your token here', dbFile: 'dadata.db' });
 
-// Run the script for the first time to create directory structure,
-// then put files with inns into input directory and run the script again
-// Or you can create input directory in your workingDir,
-// put files with inns there and run the script
-manager.start().catch(console.log);
+manager.start().then(() => manager.start());
+
+// Or you can run start method multiple times and check errors
+// with help of endedWithRetryErrors and endedWithStopError properties
+(async function () {
+  let doStart = true;
+  while (doStart) {
+    await manager.start();
+    if (manager.endedWithStopError) return;
+    doStart = manager.endedWithRetryErrors;
+  }
+})();
 
 // If for some reasons not all requests were successful or
 // a number of inns in input files are more than 10000 (free of charge),
@@ -215,17 +247,32 @@ downloader
 
 [Примеры использования](src/nalogru/examples/metadataRequestManagerDb.js)
 ```javascript
+// Run the script for the first time to create directory structure,
+// then put files with inns into input directory and run the script again.
+// Or you can create input directory in your workingDir,
+// put files with inns there and run the script.
+// The MetadataRequestManagerDb is designed to save the state between runs.
+// So if you want to retry request errors, you can run the script multiple times,
+// each time instantiating MetadataRequestManagerDb class again.
+
 const Manager = require('../MetadataRequestManagerDb');
 
 const workingDir = process.argv[2];
 
 const manager = new Manager({ workingDir, dbFile: 'nalogru.db' });
 
-// Run the script for the first time to create directory structure,
-// then put files with inns into input directory and run the script again
-// Or you can create input directory in your workingDir,
-// put files with inns there and run the script
 manager.start().catch(console.log);
+
+// Or you can run start method multiple times and check errors
+// with help of endedWithRetryErrors and endedWithStopError properties
+(async function () {
+  let doStart = true;
+  while (doStart) {
+    await manager.start();
+    if (manager.endedWithStopError) return;
+    doStart = manager.endedWithRetryErrors;
+  }
+})();
 
 // If for some reasons not all requests were successful
 // and you want to write into output files json objects received so far
@@ -242,17 +289,32 @@ manager.cleanBeforeFinish().catch(console.log);
 
 [Примеры использования](src/nalogru/examples/pdfRequestManagerDb.js)
 ```javascript
+// Run the script for the first time to create directory structure,
+// then put files with inns into input directory and run the script again.
+// Or you can create input directory in your workingDir,
+// put files with inns there and run the script.
+// The PDFRequestManagerDb is designed to save the state between runs.
+// So if you want to retry request errors, you can run the script multiple times,
+// each time instantiating PDFRequestManagerDb class again.
+
 const Manager = require('../PDFRequestManagerDb');
 
 const workingDir = process.argv[2];
 
 const manager = new Manager({ workingDir, dbFile: 'pdf.db' });
 
-// Run the script for the first time to create directory structure,
-// then put files with inns into input directory and run the script again
-// Or you can create input directory in your workingDir,
-// put files with inns there and run the script
 manager.start().catch(console.log);
+
+// Or you can run start method multiple times and check errors
+// with help of endedWithRetryErrors and endedWithStopError properties
+(async function () {
+  let doStart = true;
+  while (doStart) {
+    await manager.start();
+    if (manager.endedWithStopError) return;
+    doStart = manager.endedWithRetryErrors;
+  }
+})();
 ```
 
 ## Установка
@@ -342,7 +404,7 @@ Gets information about the companies found by query parameters
 | [options.requestsLengthToCheckFailureRate] | <code>number</code> | <code>5</code> | minimum number of requests sent  simultaneously to check failure rate |
 | [options.timeToWaitBeforeNextAttempt] | <code>number</code> | <code>30 * 60 * 1000</code> | time in milliseconds  to wait for the first time failure rate is exceeded |
 
-### apiRequestManager.start([checkingErrors]) ⇒ <code>Promise</code>
+#### apiRequestManager.start() ⇒ <code>Promise</code>
 Launches the request process
 
 **Returns**: <code>Promise</code> - Promise object represents void  
@@ -384,8 +446,11 @@ Writes output files with json data for requests completed successfully so far
 #### apiRequestManagerDb.getAllContent() ⇒ <code>void</code>
 Writes output files with all json data from jsons table
 
+#### apiRequestManagerDb.cleanBeforeFinish() ⇒ <code>void</code>
+Cleans after the request process
+
 #### apiRequestManagerDb.start() ⇒ <code>Promise</code>
-Launches the download process
+Launches the request process
 
 **Returns**: <code>Promise</code> - Promise object represents void  
 
@@ -604,8 +669,11 @@ Writes output files with json data for requests completed successfully so far
 #### metadataRequestManagerDb.getAllContent() ⇒ <code>void</code>
 Writes output files with all json data from jsons table
 
+#### metadataRequestManagerDb.cleanBeforeFinish() ⇒ <code>void</code>
+Cleans after the request process
+
 #### metadataRequestManagerDb.start() ⇒ <code>Promise</code>
-Launches the download process
+Launches the request process
 
 **Returns**: <code>Promise</code> - Promise object represents void  
 
@@ -634,8 +702,11 @@ Writes a file with a list of inns, on which some network error occurred, and the
 #### pdfRequestManagerDb.generateReport() ⇒ <code>void</code>
 Writes a report with statistics on downloads and files with lists of inns with errors
 
+#### pdfRequestManagerDb.cleanBeforeFinish() ⇒ <code>void</code>
+Cleans after the request process
+
 #### pdfRequestManagerDb.start() ⇒ <code>Promise</code>
-Launches the download process
+Launches the request process
 
 **Returns**: <code>Promise</code> - Promise object represents void  
 
