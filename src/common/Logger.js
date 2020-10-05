@@ -13,6 +13,7 @@ class Logger {
    * @param {Object} [options={}] - configuration settings
    * @param {string} [options.mode='w'] - flag, that indicates in what mode files
    *  should be opened for logging
+   * @param {?string} [options.parsingErrorPath=null] - path to file to log parsing errors
    * @param {?string} [options.retryErrorPath=null] - path to file to log network errors to retry
    * @param {?string} [options.validationErrorPath=null] - path to file to log validation errors
    * @param {?string} [options.generalErrorPath=null] - path to file to log general errors
@@ -21,12 +22,15 @@ class Logger {
   constructor(options = {}) {
     this.mode = options.mode || 'w';
     this._pathTypes = {
+      parsingError: options.parsingErrorPath || null,
       retryError: options.retryErrorPath || null,
       validationError: options.validationErrorPath || null,
       generalError: options.generalErrorPath || null,
       success: options.successPath || null,
     };
+
     this._streamTypes = {
+      parsingError: null,
       retryError: null,
       validationError: null,
       generalError: null,
