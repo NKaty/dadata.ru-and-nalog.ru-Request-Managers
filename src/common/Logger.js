@@ -55,14 +55,16 @@ class Logger {
    */
   log(type, message, ...args) {
     try {
-      args = args.filter((item) => item.length);
+      args = args.filter((item) => item !== undefined && item !== null && item.length);
       const info = args.length ? `${args.join(', ')} ` : '';
       const stream = this._getStream(type);
-      if (message instanceof Error) console.log(`${info}${message.stack}`);
-      if (type === 'generalError' && stream) {
-        stream.write(`${getDate(true)} ${info}${message.stack}\n`);
-      } else {
-        stream && stream.write(`${getDate(true)} ${info}${message}\n`);
+      if (message instanceof Error && message.stack) console.log(`${info}${message.stack}`);
+      if (stream) {
+        if (type === 'generalError' && message instanceof Error && message.stack) {
+          stream.write(`${getDate(true)} ${info}${message.stack}\n`);
+        } else {
+          stream.write(`${getDate(true)} ${info}${message}\n`);
+        }
       }
     } catch (err) {
       console.log(err);
