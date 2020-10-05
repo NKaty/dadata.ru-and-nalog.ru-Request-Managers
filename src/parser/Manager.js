@@ -42,9 +42,7 @@ class Manager {
     this._mainReportPath = resolve(this._reportsPath, this.reportFile);
     this._parsingErrorsPath = resolve(this._reportsPath, this.parsingErrorsFile);
     this.dbPath = resolve(this.workingDir, this.dbFile);
-    this._parsingErrorStream = null;
-    this._successOutputStream = null;
-    this._streams = [this._parsingErrorStream, this._successOutputStream];
+    this._streams = { parsingErrorStream: null, successOutputStream: null };
     // Number of pdf files simultaneously sent to worker pool
     this.pdfLength = options.pdfLength || 100;
     // Clean or not the table with json data before a new portion input files
@@ -55,10 +53,14 @@ class Manager {
     this.db = new Database(this.dbPath);
     this._parser = null;
     this.numberOfThreads = options.numberOfThreads || null;
-    this.logger = null;
+    this.logger = new Logger({
+      generalErrorPath: resolve(this._logsPath, `generalErrors_${getDate()}.log`),
+      parsingErrorPath: resolve(this._logsPath, `parsingErrors_${getDate()}.log`),
+      successPath: resolve(this._logsPath, `success_${getDate()}.log`),
+    });
     this.extractData = options.extractData || null;
-    this.getResultAsArrays = this.getResultAsArrays.bind(this);
-    this.getAllContentAsArrays = this.getAllContentAsArrays.bind(this);
+    this._getResultAsArrays = this._getResultAsArrays.bind(this);
+    this._getAllContentAsArrays = this._getAllContentAsArrays.bind(this);
     this._createDirStructure();
     this._createDb();
   }
@@ -67,16 +69,6 @@ class Manager {
     if (!existsSync(this._outputPath)) mkdirSync(this._outputPath);
     if (!existsSync(this._logsPath)) mkdirSync(this._logsPath);
     if (!existsSync(this._reportsPath)) mkdirSync(this._reportsPath);
-  }
-
-  _initLogger() {
-    if (!this.logger) {
-      this.logger = new Logger({
-        generalErrorPath: resolve(this._logsPath, `generalErrors_${getDate()}.log`),
-        parsingErrorPath: resolve(this._logsPath, `parsingErrors_${getDate()}.log`),
-        successPath: resolve(this._logsPath, `success_${getDate()}.log`),
-      });
-    }
   }
 
   _createDb() {
@@ -208,16 +200,16 @@ class Manager {
   _writeJSONFiles(getResultArraysGen) {
     let fileCount = 1;
     for (const batch of getResultArraysGen(this.pdfObjectsPerFile)) {
-      this._successOutputStream = createWriteStream(
+      this._streams.successOutputStream = createWriteStream(
         resolve(this._outputPath, `${getDate()}_${fileCount}.json`)
       );
-      this._successOutputStream.write('[');
+      this._streams.successOutputStream.write('[');
       batch.forEach((data, index) => {
-        if (index === 0) this._successOutputStream.write(`\n${JSON.stringify(data)}`);
-        else this._successOutputStream.write(`,\n${JSON.stringify(data)}`);
+        if (index === 0) this._streams.successOutputStream.write(`\n${JSON.stringify(data)}`);
+        else this._streams.successOutputStream.write(`,\n${JSON.stringify(data)}`);
       });
       fileCount += 1;
-      this._successOutputStream.end('\n]\n');
+      this._streams.successOutputStream.end('\n]\n');
     }
   }
 
@@ -225,16 +217,28 @@ class Manager {
    * @desc Writes output files with json data for requests completed successfully so far
    * @returns {void}
    */
-  getResult() {
-    this._writeJSONFiles(this.getResultAsArrays);
+  async getResult() {
+    try {
+      this._writeJSONFiles(this._getResultAsArrays);
+    } catch (err) {
+      this.logger.log('generalError', err);
+    } finally {
+      await this._cleanBeforeFinish();
+    }
   }
 
   /**
    * @desc Writes output files with all json data from jsons table
    * @returns {void}
    */
-  getAllContent() {
-    this._writeJSONFiles(this.getAllContentAsArrays);
+  async getAllContent() {
+    try {
+      this._writeJSONFiles(this._getAllContentAsArrays);
+    } catch (err) {
+      this.logger.log('generalError', err);
+    } finally {
+      await this._cleanBeforeFinish();
+    }
   }
 
   // Writes json data from jsons tables to output files
@@ -252,11 +256,7 @@ class Manager {
     }
   }
 
-  /**
-   * @desc Writes output files with json data for requests completed successfully so far
-   * @returns {void}
-   */
-  *getResultAsArrays(limit = this.pdfObjectsPerArray) {
+  *_getResultAsArrays(limit) {
     yield* this._getResultArrays(
       (offset) =>
         this.db
@@ -271,10 +271,20 @@ class Manager {
   }
 
   /**
-   * @desc Writes output files with all json data from jsons table
+   * @desc Writes output files with json data for requests completed successfully so far
    * @returns {void}
    */
-  *getAllContentAsArrays(limit = this.pdfObjectsPerArray) {
+  async *getResultAsArrays(limit = this.pdfObjectsPerArray) {
+    try {
+      yield* this._getResultAsArrays(limit);
+    } catch (err) {
+      this.logger.log('generalError', err);
+    } finally {
+      await this._cleanBeforeFinish();
+    }
+  }
+
+  *_getAllContentAsArrays(limit) {
     yield* this._getResultArrays(
       (offset) =>
         this.db
@@ -283,6 +293,20 @@ class Manager {
       (item) => item.json,
       limit
     );
+  }
+
+  /**
+   * @desc Writes output files with all json data from jsons table
+   * @returns {void}
+   */
+  async *getAllContentAsArrays(limit = this.pdfObjectsPerArray) {
+    try {
+      yield* this._getAllContentAsArrays(limit);
+    } catch (err) {
+      this.logger.log('generalError', err);
+    } finally {
+      await this._cleanBeforeFinish();
+    }
   }
 
   _collectStat() {
@@ -294,11 +318,7 @@ class Manager {
     };
   }
 
-  /**
-   * @desc Writes a report with statistics on downloads
-   * @returns {void}
-   */
-  writeReport() {
+  _writeReport() {
     const stat = this._collectStat();
     const report = `Общее количество pdf файлов: ${stat.paths}
 Обработано файлов: ${stat.success + stat.parsingErrors}
@@ -310,11 +330,20 @@ class Manager {
   }
 
   /**
-   * @desc Writes a file with a list of inns, on which some network error occurred
-   * and they require re-request, and a file with a list of invalid inns
+   * @desc Writes a report with statistics on downloads
    * @returns {void}
    */
-  writeErrors() {
+  async writeReport() {
+    try {
+      this._writeReport();
+    } catch (err) {
+      this.logger.log('generalError', err);
+    } finally {
+      await this._cleanBeforeFinish();
+    }
+  }
+
+  _writeErrors() {
     const errors = this.db
       .prepare('SELECT path FROM paths WHERE status = ?')
       .raw()
@@ -322,12 +351,37 @@ class Manager {
       .flat();
 
     if (errors.length) {
-      if (!this._parsingErrorStream)
-        this._parsingErrorStream = createWriteStream(this._parsingErrorsPath);
-      errors.forEach((path) => this._parsingErrorStream.write(`${path}\n`));
-      this._parsingErrorStream.end(`Отчет сформирован: ${getDate(true)}\n`);
+      if (!this._streams.parsingErrorStream) {
+        this._streams.parsingErrorStream = createWriteStream(this._parsingErrorsPath);
+      }
+      errors.forEach((path) => this._streams.parsingErrorStream.write(`${path}\n`));
+      this._streams.parsingErrorStream.end(`Отчет сформирован: ${getDate(true)}\n`);
     } else {
       if (existsSync(this._parsingErrorsPath)) unlinkSync(this._parsingErrorsPath);
+    }
+  }
+
+  /**
+   * @desc Writes a file with a list of inns, on which some network error occurred
+   * and they require re-request, and a file with a list of invalid inns
+   * @returns {void}
+   */
+  async writeErrors() {
+    try {
+      this._writeErrors();
+    } catch (err) {
+      this.logger.log('generalError', err);
+    } finally {
+      await this._cleanBeforeFinish();
+    }
+  }
+
+  _generateReport() {
+    try {
+      this._writeReport();
+      this._writeErrors();
+    } catch (err) {
+      this.logger.log('generalError', err);
     }
   }
 
@@ -335,36 +389,35 @@ class Manager {
    * @desc Writes a report with statistics on downloads and files with lists of inns with errors
    * @returns {void}
    */
-  generateReport() {
-    try {
-      this.writeReport();
-      this.writeErrors();
-    } catch (err) {
-      if (this.logger) this.logger.log('generalError', err);
-      else console.log(err);
-    }
+  async generateReport() {
+    this._generateReport();
+    await this._cleanBeforeFinish();
   }
 
   async _cleanBeforeFinish() {
-    await closeStreams(this._streams);
-    await this.logger.closeStreams();
-    this.logger = null;
-    await this._parser.clean();
-    this._parser.removeAllListeners('error');
-    this._parser = null;
+    try {
+      await closeStreams(Object.values(this._streams));
+      Object.keys(this._streams).forEach((key) => (this._streams[key] = null));
+      await this.logger.closeStreams();
+      if (this._parser) {
+        await this._parser.clean();
+        this._parser.removeAllListeners('error');
+        this._parser = null;
+      }
+    } catch (err) {
+      console.log(err);
+    }
   }
 
   async start() {
     try {
-      this._initLogger();
       this._processInputDir();
       this._initParser();
       await this._parse();
     } catch (err) {
-      if (this.logger) this.logger.log('generalError', err);
-      else console.log(err);
+      this.logger.log('generalError', err);
     } finally {
-      this.generateReport();
+      this._generateReport();
       await this._cleanBeforeFinish();
     }
   }
@@ -372,9 +425,13 @@ class Manager {
 
 module.exports = Manager;
 
-const manager = new Manager({ inputDir: 'output', numberOfThreads: 2 });
-manager.start();
-// manager.generateReport();
+const manager = new Manager({ inputDir: 'logs', numberOfThreads: 2 });
+// manager.start();
+(async function () {
+  for await (const data of manager.getResultAsArrays()) {
+    console.log(data);
+  }
+})();
 
 // (async function () {
 //   const times = [];
