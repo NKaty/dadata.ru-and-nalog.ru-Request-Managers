@@ -168,9 +168,16 @@ class Manager {
   }
 
   async _parse() {
-    const pathArray = this.db.prepare('SELECT path FROM paths WHERE status = ?').raw().all('raw');
-    while (pathArray.length) {
-      const paths = pathArray.splice(0, this.pdfLength).flat();
+    const pathGen = this._getDataArrays(
+      (offset) =>
+        this.db
+          .prepare('SELECT path FROM paths WHERE status = ? ORDER BY path LIMIT ? OFFSET ?')
+          .all('raw', this.pdfLength, offset),
+      (item) => item.path,
+      this.pdfLength
+    );
+
+    for (const paths of pathGen) {
       await this._batchParse(paths);
     }
     // console.timeEnd('time');
@@ -242,30 +249,30 @@ class Manager {
   }
 
   // Writes json data from jsons tables to output files
-  *_getResultArrays(getItems, getJSON, limit) {
+  *_getDataArrays(getItems, getData, limit) {
     let offset = 0;
     let paths = getItems(offset);
     while (paths.length) {
       offset += limit;
-      const dataArray = paths.map((item) => {
-        const data = JSON.parse(getJSON(item));
-        return this.extractData ? this.extractData(item.path, data, true) : data;
-      });
+      const dataArray = paths.map(getData);
       yield dataArray;
       paths = getItems(offset);
     }
   }
 
   *_getResultAsArrays(limit) {
-    yield* this._getResultArrays(
+    yield* this._getDataArrays(
       (offset) =>
         this.db
           .prepare('SELECT path, ogrn FROM paths WHERE status = ? ORDER BY path LIMIT ? OFFSET ?')
           .all('success', limit, offset),
-      (item) =>
-        this.db
+      (item) => {
+        const json = this.db
           .prepare('SELECT json FROM jsons WHERE path = ? AND ogrn = ?')
-          .get(item.path, item.ogrn).json,
+          .get(item.path, item.ogrn).json;
+        const data = JSON.parse(json);
+        return this.extractData ? this.extractData(item.path, data, true) : data;
+      },
       limit
     );
   }
@@ -285,12 +292,15 @@ class Manager {
   }
 
   *_getAllContentAsArrays(limit) {
-    yield* this._getResultArrays(
+    yield* this._getDataArrays(
       (offset) =>
         this.db
           .prepare('SELECT path, json FROM jsons ORDER BY path, ogrn LIMIT ? OFFSET ?')
           .all(limit, offset),
-      (item) => item.json,
+      (item) => {
+        const data = JSON.parse(item.json);
+        return this.extractData ? this.extractData(item.path, data, true) : data;
+      },
       limit
     );
   }
@@ -425,13 +435,14 @@ class Manager {
 
 module.exports = Manager;
 
-const manager = new Manager({ inputDir: 'logs', numberOfThreads: 2 });
-// manager.start();
-(async function () {
-  for await (const data of manager.getResultAsArrays()) {
-    console.log(data);
-  }
-})();
+const manager = new Manager({ inputDir: 'output', numberOfThreads: 2 });
+manager.start();
+// manager.getResult();
+// (async function () {
+//   for await (const data of manager.getResultAsArrays()) {
+//     console.log(data);
+//   }
+// })();
 
 // (async function () {
 //   const times = [];
