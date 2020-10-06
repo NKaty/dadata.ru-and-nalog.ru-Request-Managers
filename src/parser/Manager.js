@@ -420,9 +420,9 @@ class Manager {
     }
   }
 
-  async start() {
+  async start(resume = false) {
     try {
-      this._processInputDir();
+      if (!resume) this._processInputDir();
       this._initParser();
       await this._parse();
     } catch (err) {
