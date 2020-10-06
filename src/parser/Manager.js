@@ -136,10 +136,9 @@ class Manager {
     }
   }
 
-  _updateAfterParsing(result) {
+  _updateAfterParsing(results) {
     const updateStatus = this.db.prepare('UPDATE paths SET status = ?, ogrn = ? WHERE path = ?');
-    if (result.status === 'fulfilled') {
-      const { data, path } = result.value;
+    const insertData = this.db.transaction((data, path) => {
       updateStatus.run('success', data.ogrn, path);
       if (
         this.db
@@ -154,17 +153,24 @@ class Manager {
           .prepare('UPDATE jsons SET json = ? WHERE path = ? AND ogrn = ?')
           .run(JSON.stringify(data), path, data.ogrn);
       }
-      this.logger.log('success', 'Has been parsed.', path);
-    } else {
-      const { error, path } = result.reason;
-      updateStatus.run('error', null, path);
-      this.logger.log('parsingError', error, path);
-    }
+    });
+
+    results.forEach((result) => {
+      if (result.status === 'fulfilled') {
+        const { data, path } = result.value;
+        insertData(data, path);
+        this.logger.log('success', 'Has been parsed.', path);
+      } else {
+        const { error, path } = result.reason;
+        updateStatus.run('error', null, path);
+        this.logger.log('parsingError', error, path);
+      }
+    });
   }
 
   async _batchParse(paths) {
     const results = await Promise.allSettled(paths.map((path) => this._parser.run(path)));
-    results.forEach((result) => this._updateAfterParsing(result));
+    this._updateAfterParsing(results);
   }
 
   async _parse() {
@@ -186,7 +192,7 @@ class Manager {
   _updatePromise(results) {
     return new Promise((resolve) => {
       setImmediate(() => {
-        results.forEach((result) => this._updateAfterParsing(result));
+        this._updateAfterParsing(results);
         resolve();
       });
     });
