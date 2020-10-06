@@ -169,10 +169,10 @@ class Manager {
 
   async _parse() {
     const pathGen = this._getDataArrays(
-      (offset) =>
+      () =>
         this.db
-          .prepare('SELECT path FROM paths WHERE status = ? ORDER BY path LIMIT ? OFFSET ?')
-          .all('raw', this.pdfLength, offset),
+          .prepare('SELECT path FROM paths WHERE status = ? LIMIT ?')
+          .all('raw', this.pdfLength),
       (item) => item.path,
       this.pdfLength
     );
@@ -251,12 +251,12 @@ class Manager {
   // Writes json data from jsons tables to output files
   *_getDataArrays(getItems, getData, limit) {
     let offset = 0;
-    let paths = getItems(offset);
-    while (paths.length) {
+    let items = getItems(offset);
+    while (items.length) {
       offset += limit;
-      const dataArray = paths.map(getData);
+      const dataArray = items.map(getData).filter((item) => item !== null && item !== undefined);
       yield dataArray;
-      paths = getItems(offset);
+      items = getItems(offset);
     }
   }
 
@@ -267,10 +267,11 @@ class Manager {
           .prepare('SELECT path, ogrn FROM paths WHERE status = ? ORDER BY path LIMIT ? OFFSET ?')
           .all('success', limit, offset),
       (item) => {
-        const json = this.db
+        const row = this.db
           .prepare('SELECT json FROM jsons WHERE path = ? AND ogrn = ?')
-          .get(item.path, item.ogrn).json;
-        const data = JSON.parse(json);
+          .get(item.path, item.ogrn);
+        if (row === undefined) return null;
+        const data = JSON.parse(row.json);
         return this.extractData ? this.extractData(item.path, data, true) : data;
       },
       limit
