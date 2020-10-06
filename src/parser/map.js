@@ -66,6 +66,7 @@ const getAddressObject = (address) => {
     ['settlement', getData(address, 'Населенный пункт (село и т.п.)')],
     ['street', getData(address, 'Улица (проспект, переулок и т.д.)')],
     ['house', getData(address, 'Дом (владение и т.п.)')],
+    ['block', getData(address, 'Корпус (строение и т.п.)')],
     ['flat', getData(address, 'Офис (квартира и т.п.)')],
     ['additional', getData(address, 'Дополнительные сведения')],
   ]);
@@ -93,6 +94,8 @@ const getRegistrationObject = (data) => {
     type === 'legal'
       ? 'Дата регистрации до 1 июля 2002 года'
       : 'Дата регистрации до 1 января 2004 года';
+  const crimeaRegField =
+    'Сведения о регистрации на территории Республики Крым или территории города федерального значения Севастополя на день принятия в Российскую Федерацию Республики Крым и образования в составе Российской Федерации новых субъектов - Республики Крым и города федерального значения Севастополя';
   const registrationObject = {
     method: getData(data, regField, 'Способ образования'),
     prev_reg_number: getData(data, regField, prevRegNumberField),
@@ -102,6 +105,8 @@ const getRegistrationObject = (data) => {
       regField,
       'Наименование органа, зарегистрировавшего юридическое лицо до 1 июля 2002 года'
     ),
+    crimea_reg_number: getData(data, regField, crimeaRegField, 'Регистрационный номер'),
+    crimea_reg_date: getData(data, regField, crimeaRegField, 'Дата регистрации'),
   };
   return Object.values(registrationObject).every((item) => item === null)
     ? null
