@@ -186,27 +186,7 @@ class Manager {
     for (const paths of pathGen) {
       await this._batchParse(paths);
     }
-    // console.timeEnd('time');
-  }
-
-  _updatePromise(results) {
-    return new Promise((resolve) => {
-      setImmediate(() => {
-        this._updateAfterParsing(results);
-        resolve();
-      });
-    });
-  }
-
-  async _parseAsync() {
-    const pathArray = this.db.prepare('SELECT path FROM paths WHERE status = ?').raw().all('raw');
-    while (pathArray.length) {
-      const paths = pathArray.splice(0, this.pdfLength).flat();
-      const results = await Promise.allSettled(paths.map((path) => this._parser.run(path)));
-      if (pathArray.length) this._updatePromise(results);
-      else await this._updatePromise(results);
-    }
-    // console.timeEnd('time');
+    console.timeEnd('time');
   }
 
   // Writes json data from jsons tables to output files
@@ -442,7 +422,7 @@ class Manager {
 
 module.exports = Manager;
 
-const manager = new Manager({ inputDir: 'output', numberOfThreads: 2 });
+const manager = new Manager({ inputDir: 'docs', numberOfThreads: 2 });
 manager.start();
 // manager.getResult();
 // (async function () {
