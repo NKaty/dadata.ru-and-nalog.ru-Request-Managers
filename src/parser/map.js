@@ -1,3 +1,5 @@
+// Extracts data from parsed egrul pdf files
+
 let type = null;
 
 const getData = (data, ...fields) => {
@@ -276,6 +278,11 @@ const getObjects = (data, getObject) => {
   return Object.values(data).map((item) => getObject(item));
 };
 
+/**
+ * @desc Extracts data from parsed egrul pdf files
+ * @param {Object} data - an object representing a parsed egrul pdf file
+ * @returns {Object} - an object with data
+ */
 module.exports = (data) => {
   const inn = getINN(data);
   type = getType(inn);
