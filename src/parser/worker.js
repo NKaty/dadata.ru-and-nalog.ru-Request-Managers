@@ -14,9 +14,9 @@ parentPort.on('message', async (path) => {
   try {
     const result = await parser.parse(path);
     // Send the data object to the main thread
-    parentPort.postMessage({ status: 'success', data: result });
+    parentPort.postMessage(result);
   } catch (error) {
     // Catch an error, send it to the main thread
-    parentPort.postMessage({ status: 'error', error });
+    parentPort.postMessage(error);
   }
 });

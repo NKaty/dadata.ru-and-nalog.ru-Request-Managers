@@ -193,9 +193,9 @@ class ParsingManager {
         insertData(data, path);
         this.logger.log('success', 'Has been parsed.', path);
       } else {
-        const { error, path } = result.reason;
+        const { cause, path } = result.reason;
         updateStatus.run('error', null, path);
-        this.logger.log('parsingError', error, path);
+        this.logger.log('parsingError', cause, path);
       }
     });
   }

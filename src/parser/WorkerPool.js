@@ -2,6 +2,7 @@ const { Worker } = require('worker_threads');
 const { AsyncResource } = require('async_hooks');
 const { EventEmitter } = require('events');
 const { cpus } = require('os');
+const { ParsingError } = require('../common/customErrors');
 
 const kTaskInfo = Symbol('kTaskInfo');
 const kWorkerFreedEvent = Symbol('kWorkerFreedEvent');
@@ -67,12 +68,13 @@ class WorkerPool extends EventEmitter {
     // in the worker thread by ourselves and sending them to the main thread.
     // Therefore the result object can contain either data or error information.
     worker.on('message', (result) => {
-      // Add path to the result object
-      const data = { ...result, path: worker[kTaskInfo].path };
-      // If it is a success, resolve promise
-      if (result.status === 'success') worker[kTaskInfo].done(null, data);
       // If an error was caught, reject promise
-      else worker[kTaskInfo].done(data, null);
+      if (result instanceof Error) {
+        worker[kTaskInfo].done(new ParsingError(result, worker[kTaskInfo].path), null);
+        // If it is a success, resolve promise
+      } else {
+        worker[kTaskInfo].done(null, { data: result, path: worker[kTaskInfo].path });
+      }
       worker[kTaskInfo] = null;
       this._activeWorkers[i] = false;
       // Take next task
@@ -82,13 +84,11 @@ class WorkerPool extends EventEmitter {
     worker.on('error', (error) => {
       // If there is information about the task
       if (worker[kTaskInfo]) {
-        // Create an object similar to a result object from the onMessage listener
-        const data = { status: 'error', error, path: worker[kTaskInfo].path };
         // Reject promise
-        worker[kTaskInfo].done(data, null);
+        worker[kTaskInfo].done(new ParsingError(error, worker[kTaskInfo].path), null);
         // No information about task
       } else {
-        // Just emit error
+        // Emit error
         this.emit('error', error);
       }
       // Maintain the number of worker threads
@@ -157,8 +157,7 @@ class WorkerPool extends EventEmitter {
         // Otherwise execute the task
         this._runWorker(availableWorkerId, task);
       } catch (error) {
-        // eslint-disable-next-line
-        reject({ status: 'error', error, path });
+        reject(new ParsingError(error, path));
       }
     });
   }

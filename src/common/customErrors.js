@@ -27,8 +27,19 @@ class StopError extends Error {
   }
 }
 
+// Parsing error wraps other errors in order to add path information
+class ParsingError extends Error {
+  constructor(cause, path) {
+    super(cause.message);
+    this.name = 'ParsingError';
+    this.cause = cause;
+    this.path = path;
+  }
+}
+
 module.exports = {
   ValidationError,
   RequestError,
   StopError,
+  ParsingError,
 };
