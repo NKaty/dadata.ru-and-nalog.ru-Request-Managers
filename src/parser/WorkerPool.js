@@ -38,14 +38,15 @@ class WorkerPool extends EventEmitter {
     this._activeWorkers = {};
     this.workerPath = workerPath;
     this.numberOfThreads = numberOfThreads;
+
+    if (!this.numberOfThreads || isNaN(this.numberOfThreads) || this.numberOfThreads < 1) {
+      throw new TypeError('The number of worker threads must be a positive number');
+    }
+
     this._init();
   }
 
   _init() {
-    if (!this.numberOfThreads || isNaN(this.numberOfThreads) || this.numberOfThreads < 1) {
-      return null;
-    }
-
     this.on(kWorkerFreedEvent, this._kWorkerFreedEventHandler);
 
     for (let i = 0; i < this.numberOfThreads; i += 1) {
@@ -102,8 +103,10 @@ class WorkerPool extends EventEmitter {
   }
 
   _removeWorker(i) {
-    this._workers[i].terminate();
-    this._workers[i] = null;
+    if (this._workers[i]) {
+      this._workers[i].terminate();
+      this._workers[i] = null;
+    }
   }
 
   _getInactiveWorker() {
@@ -135,23 +138,28 @@ class WorkerPool extends EventEmitter {
    */
   run(path) {
     return new Promise((resolve, reject) => {
-      const availableWorkerId = this._getInactiveWorker();
-      // Create a task
-      const task = {
-        path,
-        callback: (error, result) => {
-          if (error) reject(error);
-          else resolve(result);
-        },
-      };
-      // There are no available worker threads
-      // Add the task to the queue
-      if (availableWorkerId === -1) {
-        this._queue.push(task);
-        return;
+      try {
+        const availableWorkerId = this._getInactiveWorker();
+        // Create a task
+        const task = {
+          path,
+          callback: (error, result) => {
+            if (error) reject(error);
+            else resolve(result);
+          },
+        };
+        // There are no available worker threads
+        // Add the task to the queue
+        if (availableWorkerId === -1) {
+          this._queue.push(task);
+          return;
+        }
+        // Otherwise execute the task
+        this._runWorker(availableWorkerId, task);
+      } catch (error) {
+        // eslint-disable-next-line
+        reject({ status: 'error', error, path });
       }
-      // Otherwise execute the task
-      this._runWorker(availableWorkerId, task);
     });
   }
 
@@ -161,7 +169,9 @@ class WorkerPool extends EventEmitter {
    */
   async clean() {
     this.off(kWorkerFreedEvent, this._kWorkerFreedEventHandler);
-    await Promise.allSettled(Object.values(this._workers).map((worker) => worker.terminate()));
+    await Promise.allSettled(
+      Object.values(this._workers).map((worker) => worker && worker.terminate())
+    );
   }
 }
 
