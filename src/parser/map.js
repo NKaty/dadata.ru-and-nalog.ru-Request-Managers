@@ -246,11 +246,61 @@ const getFounderObject = (founder) => {
   const name = [founder['Фамилия'], founder['Имя'], founder['Отчество']]
     .filter((item) => !!item)
     .join(' ');
+  const managerField =
+    'Сведения об органе государственной власти, органе местного самоуправления, юридическом лице, осуществляющем права учредителя (участника)';
   return {
-    name: name || getData(founder, 'Полное наименование'),
-    inn: getData(founder, 'ИНН'),
+    name:
+      name ||
+      getData(founder, 'Полное наименование') ||
+      getData(founder, managerField, 'Полное наименование'),
+    inn: getData(founder, 'ИНН') || getData(founder, managerField, 'ИНН'),
+    ogrn: getData(founder, 'ОГРН') || getData(founder, managerField, 'ОГРН'),
+    region: getData(founder, 'Субъект Российской Федерации'),
+    area: getData(founder, 'Муниципальное образование'),
     share_nominal: getData(founder, 'Номинальная стоимость доли (в рублях)'),
     share_percent: getData(founder, 'Размер доли (в процентах)'),
+    additional: getData(founder, managerField) ? managerField : null,
+    pledge: getData(founder, 'Сведения об обременении')
+      ? {
+          type: getData(founder, 'Сведения об обременении', 'Вид обременения'),
+          term: getData(
+            founder,
+            'Сведения об обременении',
+            'Срок обременения или порядок определения срока'
+          ),
+          pledgee: getData(founder, 'Сведения о залогодержателе')
+            ? {
+                ogrn: getData(founder, 'Сведения о залогодержателе', 'ОГРН'),
+                inn: getData(founder, 'Сведения о залогодержателе', 'ИНН'),
+                name: getData(founder, 'Сведения о залогодержателе', 'Полное наименование'),
+              }
+            : null,
+          contract: getData(founder, 'Сведения о нотариальном удостоверении договора залога')
+            ? {
+                number: getData(
+                  founder,
+                  'Сведения о нотариальном удостоверении договора залога',
+                  'Номер договора'
+                ),
+                date: getData(
+                  founder,
+                  'Сведения о нотариальном удостоверении договора залога',
+                  'Дата договора'
+                ),
+                fio_notary: getData(
+                  founder,
+                  'Сведения о нотариальном удостоверении договора залога',
+                  'Фамилия, имя, отчество нотариуса, удостоверившего договор'
+                ),
+                inn_notary: getData(
+                  founder,
+                  'Сведения о нотариальном удостоверении договора залога',
+                  'ИНН нотариуса, удостоверившего договор'
+                ),
+              }
+            : null,
+        }
+      : null,
   };
 };
 
