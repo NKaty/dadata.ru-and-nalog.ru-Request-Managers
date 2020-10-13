@@ -322,9 +322,48 @@ const getBranchObject = (branch) => {
   };
 };
 
+const getReorganizationObject = (reorganization) => {
+  if (reorganization === null) return null;
+  return {
+    type: getData(reorganization, 'Форма реорганизации'),
+    participants: getObjects(
+      getData(reorganization, 'Сведения о юридических лицах, участвующих  в реорганизации'),
+      (participant) => {
+        if (participant === null) return null;
+        return {
+          ogrn: getData(participant, 'ОГРН'),
+          inn: getData(participant, 'ИНН'),
+          name: getData(participant, 'Полное наименование'),
+          status_after: getData(
+            participant,
+            'Состояние юридического лица после завершения реорганизации'
+          ),
+        };
+      }
+    ),
+  };
+};
+
+const getPredecessorObject = (predecessor) => {
+  if (predecessor === null) return null;
+  return {
+    ogrn: getData(predecessor, 'ОГРН'),
+    inn: getData(predecessor, 'ИНН'),
+    name: getData(predecessor, 'Полное наименование'),
+  };
+};
+
+const getSuccessorObject = (successor) => {
+  if (successor === null) return null;
+  return {
+    ogrn: getData(successor, 'ОГРН'),
+    name: getData(successor, 'Полное наименование'),
+  };
+};
+
 const getObjects = (data, getObject) => {
   if (data === null) return null;
-  if (Object.keys(data)[0] !== '1') return getObject(data);
+  if (Object.keys(data)[0] !== '1') return [getObject(data)];
   return Object.values(data).map((item) => getObject(item));
 };
 
@@ -417,6 +456,12 @@ module.exports = (data) => {
           ),
         }
       : null,
+    reorganization: getReorganizationObject(getData(data, 'Сведения о реорганизации')),
+    predecessors: getObjects(
+      getData(data, 'Сведения о правопредшественнике'),
+      getPredecessorObject
+    ),
+    successors: getObjects(getData(data, 'Сведения о правопреемнике'), getSuccessorObject),
     subs: getData(data, 'Сведения о филиалах и представительствах')
       ? {
           branches: getObjects(
