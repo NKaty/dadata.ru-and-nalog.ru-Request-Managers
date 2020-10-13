@@ -14,7 +14,7 @@ const workingDir = process.argv[2];
 // You must have dadata.ru token
 const manager = new Manager({ workingDir, token: 'your token here', dbFile: 'dadata.db' });
 
-manager.start().then(() => manager.start());
+manager.start().catch(console.log);
 
 // Or you can run start method multiple times and check errors
 // with help of endedWithRetryErrors and endedWithStopError properties
