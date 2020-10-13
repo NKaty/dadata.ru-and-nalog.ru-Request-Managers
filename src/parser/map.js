@@ -304,6 +304,42 @@ const getFounderObject = (founder) => {
   };
 };
 
+const getCapitalObject = (capital) => {
+  if (capital == null) return null;
+  return {
+    type: getData(capital, 'Вид'),
+    value: getData(capital, 'Размер (в рублях)'),
+    reducing: getData(capital, 'Сведения об уменьшении уставного капитала')
+      ? {
+          by: getData(
+            capital,
+            'Сведения об уменьшении уставного капитала',
+            'Величина, на которую уменьшается уставный капитал'
+          ),
+          date: getData(
+            capital,
+            'Сведения об уменьшении уставного капитала',
+            'Дата принятия решения об уменьшении уставного капитала'
+          ),
+        }
+      : null,
+    increasing: getData(capital, 'Сведения об увеличении уставного капитала')
+      ? {
+          by: getData(
+            capital,
+            'Сведения об увеличении уставного капитала',
+            'Величина, на которую увеличивается уставный капитал'
+          ),
+          date: getData(
+            capital,
+            'Сведения об увеличении уставного капитала',
+            'Дата принятия решения об увеличении уставного капитала'
+          ),
+        }
+      : null,
+  };
+};
+
 const getBranchObject = (branch) => {
   if (branch === null) return null;
   const fts = getData(branch, 'Сведения об учете в налоговом органе по месту нахождения филиала');
@@ -439,23 +475,12 @@ module.exports = (data) => {
           ),
         }
       : null,
-    capital: getData(
-      data,
-      'Сведения об уставном капитале (складочном капитале, уставном фонде, паевых взносах)'
-    )
-      ? {
-          type: getData(
-            data,
-            'Сведения об уставном капитале (складочном капитале, уставном фонде, паевых взносах)',
-            'Вид'
-          ),
-          value: getData(
-            data,
-            'Сведения об уставном капитале (складочном капитале, уставном фонде, паевых взносах)',
-            'Размер (в рублях)'
-          ),
-        }
-      : null,
+    capital: getCapitalObject(
+      getData(
+        data,
+        'Сведения об уставном капитале (складочном капитале, уставном фонде, паевых взносах)'
+      )
+    ),
     reorganization: getReorganizationObject(getData(data, 'Сведения о реорганизации')),
     predecessors: getObjects(
       getData(data, 'Сведения о правопредшественнике'),
