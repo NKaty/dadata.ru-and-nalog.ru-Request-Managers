@@ -70,13 +70,13 @@ const getAddressObject = (address) => {
     ['house', getData(address, 'Дом (владение и т.п.)')],
     ['block', getData(address, 'Корпус (строение и т.п.)')],
     ['flat', getData(address, 'Офис (квартира и т.п.)')],
-    ['additional', getData(address, 'Дополнительные сведения')],
+    ['additional_info', getData(address, 'Дополнительные сведения')],
   ]);
   let fullAddress = '';
   addressMap.forEach((value, key) => {
-    if (value !== null && key !== 'additional') fullAddress += `${value}, `;
+    if (value !== null && key !== 'additional_info') fullAddress += `${value}, `;
   });
-  if (!fullAddress && !addressMap.get('additional')) return null;
+  if (!fullAddress && !addressMap.get('additional_info')) return null;
   addressMap.set('full_address', fullAddress.slice(0, -2));
   return Object.fromEntries(addressMap.entries());
 };
@@ -238,6 +238,7 @@ const getManagementObject = (data) => {
     post: getData(management, 'Должность'),
     name: name || null,
     inn: getData(management, 'ИНН'),
+    additional_info: getData(management, 'Дополнительные сведения'),
   };
 };
 
@@ -259,7 +260,8 @@ const getFounderObject = (founder) => {
     area: getData(founder, 'Муниципальное образование'),
     share_nominal: getData(founder, 'Номинальная стоимость доли (в рублях)'),
     share_percent: getData(founder, 'Размер доли (в процентах)'),
-    additional: getData(founder, managerField) ? managerField : null,
+    organization_role: getData(founder, managerField) ? managerField : null,
+    additional_info: getData(founder, 'Дополнительные сведения'),
     pledge: getData(founder, 'Сведения об обременении')
       ? {
           type: getData(founder, 'Сведения об обременении', 'Вид обременения'),
@@ -393,6 +395,7 @@ const getSuccessorObject = (successor) => {
   if (successor === null) return null;
   return {
     ogrn: getData(successor, 'ОГРН'),
+    inn: getData(successor, 'ИНН'),
     name: getData(successor, 'Полное наименование'),
   };
 };
