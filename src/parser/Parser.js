@@ -11,11 +11,17 @@ class Parser {
   constructor() {
     this.reader = new PdfReader();
     // Links styles to header levels
+    // There can be 4 levels depending on style and content type
+    // font size + 1/0 for bold + 1/0 for italic + 1/0 text/number
     this._levelMap = {
-      1610: 1,
-      1611: 2,
-      1500: 3,
+      16101: 1,
+      16100: 2,
+      16111: 2,
+      16110: 2,
+      15000: 3,
+      15001: 4,
     };
+    this._prevHeaderType = '';
     // In some cases can be a header with additional information that has this style
     // This header does not add a new level to a data object
     this._additionalHeaderStyle = '1501';
@@ -90,15 +96,20 @@ class Parser {
   }
 
   // Gets the header level
-  // There can be 4 levels depending on style and type (text or number)
-  // 1 - style: 1610, type: text
-  // 2 - style: 1610, type: number or style: 1611, type: any
-  // 3 - style: 1500, type: any
-  // 4 - style: 1500, type: text, level of previous header (additional condition): 3
-  _getTitleLevel(text, style, prevTitleLevel) {
-    if (prevTitleLevel === 3 && this._levelMap[style] === 3 && isNaN(text)) return 4;
-    else if (!isNaN(text) && style === '1610') return 2;
-    else return this._levelMap[style];
+  _getHeaderLevel(text, style, prevLevel) {
+    const isText = isNaN(text) ? 1 : 0;
+    // style + 1/0 text/number
+    const type = `${style}${isText}`;
+
+    // headers of the same level
+    if (type === this._prevHeaderType) return prevLevel;
+
+    this._prevHeaderType = type;
+    let level = this._levelMap[type];
+    // Adjust the level
+    // Sometimes the fourth level header can go after the first level header
+    if (level - prevLevel > 1) level = prevLevel + 1;
+    return level;
   }
 
   // Cut unnecessary rows from the beginning (up to the first header) and the end of the document
@@ -124,7 +135,7 @@ class Parser {
    */
   convert(rowData) {
     const preparedRowData = this._preparePDF(rowData);
-    let prevTitleLevel = 1;
+    let prevHeaderLevel = 1;
     // Keeps a chain of objects up to the current level
     // Allows to return to previous levels
     const levels = [];
@@ -135,7 +146,7 @@ class Parser {
       // Row is a header
       if (item.size === 1) {
         const [text, style] = Array.from(item.values())[0];
-        const level = this._getTitleLevel(text, style, prevTitleLevel);
+        const level = this._getHeaderLevel(text, style, prevHeaderLevel);
         // There is no level for this header
         if (level === undefined) {
           // If it is an additional header that does not add a new level to a data object
@@ -146,22 +157,23 @@ class Parser {
           }
           // In other cases ignore the unknown header
           return acc;
-          // Current header is subheader of the previous one
-        } else if (level > prevTitleLevel) {
+          // Current header is a subheader of the previous one
+        } else if (level > prevHeaderLevel) {
           // Add a new level to the level chain
           levels.push(acc);
-          prevTitleLevel = level;
+          prevHeaderLevel = level;
           // Create a new level in the data object
           acc[text] = {};
           return acc[text];
           // Up in the level chain or remain on the same level
         } else {
           // Find the required level in the level chain
-          const levelsLength = levels.length - (prevTitleLevel - level);
+          let levelsLength = levels.length - (prevHeaderLevel - level);
+          levelsLength = levelsLength < 0 ? 0 : levelsLength;
           const currentObj = levels[levelsLength - 1] || data;
           // Update the level chain
           levels.length = levelsLength;
-          prevTitleLevel = level;
+          prevHeaderLevel = level;
           // Create a new level on the required level
           currentObj[text] = {};
           return currentObj[text];
