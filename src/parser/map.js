@@ -11,6 +11,10 @@ const getData = (data, ...fields) => {
   return value;
 };
 
+const getName = (data) => {
+  return [data['Фамилия'], data['Имя'], data['Отчество']].filter((item) => !!item).join(' ');
+};
+
 const getINN = (data) => {
   return (
     getData(data, 'Сведения об учете в налоговом органе', 'ИНН') ||
@@ -34,7 +38,7 @@ const getNameObject = (data) => {
   if (name === null) {
     name = getData(data, 'Фамилия, имя, отчество (при наличии) индивидуального предпринимателя');
     if (name === null) return null;
-    fio = [name['Фамилия'], name['Имя'], name['Отчество']].filter((item) => !!item).join(' ');
+    fio = getName(name);
     latin = [name['Фамилия (латинскими буквами)'], name['Имя (латинскими буквами)']]
       .filter((item) => !!item)
       .join(' ');
@@ -231,12 +235,9 @@ const getManagementObject = (data) => {
     'Сведения о лице, имеющем право без доверенности действовать от имени юридического лица'
   );
   if (management === null) return null;
-  const name = [management['Фамилия'], management['Имя'], management['Отчество']]
-    .filter((item) => !!item)
-    .join(' ');
   return {
     post: getData(management, 'Должность'),
-    name: name || null,
+    name: getName(management) || null,
     inn: getData(management, 'ИНН'),
     additional_info: getData(management, 'Дополнительные сведения'),
   };
@@ -244,24 +245,20 @@ const getManagementObject = (data) => {
 
 const getFounderObject = (founder) => {
   if (founder === null) return null;
-  const name = [founder['Фамилия'], founder['Имя'], founder['Отчество']]
-    .filter((item) => !!item)
-    .join(' ');
   const managerField =
     'Сведения об органе государственной власти, органе местного самоуправления, юридическом лице, осуществляющем права учредителя (участника)';
   return {
     name:
-      name ||
+      getName(founder) ||
       getData(founder, 'Полное наименование') ||
       getData(founder, managerField, 'Полное наименование'),
     inn: getData(founder, 'ИНН') || getData(founder, managerField, 'ИНН'),
     ogrn: getData(founder, 'ОГРН') || getData(founder, managerField, 'ОГРН'),
     region: getData(founder, 'Субъект Российской Федерации'),
     area: getData(founder, 'Муниципальное образование'),
+    organization_role: getData(founder, managerField) ? managerField : null,
     share_nominal: getData(founder, 'Номинальная стоимость доли (в рублях)'),
     share_percent: getData(founder, 'Размер доли (в процентах)'),
-    organization_role: getData(founder, managerField) ? managerField : null,
-    additional_info: getData(founder, 'Дополнительные сведения'),
     pledge: getData(founder, 'Сведения об обременении')
       ? {
           type: getData(founder, 'Сведения об обременении', 'Вид обременения'),
@@ -303,6 +300,18 @@ const getFounderObject = (founder) => {
             : null,
         }
       : null,
+    trustee: getData(founder, 'Сведения о доверительном управляющем')
+      ? {
+          inheritance_opening_date: getData(
+            founder,
+            'Сведения о доверительном управляющем',
+            'Дата открытия наследства'
+          ),
+          name: getName(getData(founder, 'Сведения о доверительном управляющем')),
+          inn: getData(founder, 'Сведения о доверительном управляющем', 'ИНН'),
+        }
+      : null,
+    additional_info: getData(founder, 'Дополнительные сведения'),
   };
 };
 
