@@ -1,6 +1,6 @@
 /**
  * Parser
- * Parser class parses EGRUL pdf documents downloaded from nalog.ru.
+ * Parser class parses EGRUL and EGRIP pdf documents downloaded from nalog.ru.
  */
 
 const { PdfReader } = require('pdfreader');
@@ -8,6 +8,10 @@ const { PdfReader } = require('pdfreader');
 const normalizeData = require('./map');
 
 class Parser {
+  /**
+   * Parser class
+   * @constructor
+   */
   constructor() {
     this.reader = new PdfReader();
     // Links styles to header levels
@@ -129,7 +133,7 @@ class Parser {
   }
 
   /**
-   * @desc Converts content into key: value object with regards to headers
+   * @desc Converts content into key: value object with consideration of headers
    * @param {Array.<Map>} rowData - array of maps with information about the file content
    * @returns {Object} - object with file content (keys in Russian)
    */
@@ -191,9 +195,9 @@ class Parser {
   }
 
   /**
-   * @desc Parses EGRUL pdf file
+   * @desc Parses EGRUL (EGRIP) pdf file
    * @param {string} path - pdf file path
-   * @returns {Object} - promise object represents an object with normalized file content
+   * @returns {Promise} - promise object represents an object with normalized file content
    */
   async parse(path) {
     const data = await this.read(path);

@@ -1,6 +1,6 @@
 /**
  * ParsingManager
- * Parsing manager class manages parsing of egrul pdf documents
+ * Parsing manager class manages parsing of egrul and egrip pdf documents
  * by using worker thread pool and sqlite database.
  * Keeps parsed data in a database.
  * Offers methods to write the data from a database to json files or
@@ -468,7 +468,7 @@ class ParsingManager {
    * @desc Launches the parsing process
    * @param {boolean} [resume=false] - true, if resume the parsing process
    *  after it was interrupted for some reason
-   * @returns {Promise} - Promise object represents void
+   * @returns {Promise} - promise object represents void
    */
   async start(resume = false) {
     try {
