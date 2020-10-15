@@ -153,7 +153,7 @@ class Parser {
           if (style === this._additionalHeaderStyle) {
             // Add the header as an property to the data object
             const row = Array.from(item.values());
-            acc['Дополнительные сведения'] = row[0][0];
+            acc['Дополнительный заголовок'] = row[0][0];
           }
           // In other cases ignore the unknown header
           return acc;

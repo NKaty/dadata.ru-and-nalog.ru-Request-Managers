@@ -179,7 +179,7 @@ const getOKVEDObject = (okved) => {
 
 const getOKVEDObjects = (okved) => {
   if (okved === null) return null;
-  const okvedType = getData(okved, 'Дополнительные сведения');
+  const okvedType = getData(okved, 'Дополнительный заголовок');
   return {
     type: okvedType ? okvedType.slice(1, -1) : null,
     main: getOKVEDObject(getData(okved, 'Сведения об основном виде деятельности')),
