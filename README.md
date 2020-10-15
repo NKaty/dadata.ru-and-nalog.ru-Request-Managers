@@ -1,9 +1,10 @@
-# Request Managers
-#### Реализованы классы, позволяющие получать сведения об организациях путем обращения к dadata.ru api и к сайту nalog.ru.
-Проект состоит из 3 директорий:
+# Request Managers, Parsing Manager
+#### Реализованы классы, позволяющие получать сведения об организациях, ЕГРЮЛ и ЕГРИП pdf файлы путем обращения к dadata.ru api и к сайту nalog.ru, парсить полученные ЕГРЮЛ и ЕГРИП pdf файлы.
+Проект состоит из 4 директорий:
 - common - содержит базовые классы, logger и helpers 
 - dadata - содержит классы для обращения к dadata.ru API
 - nalogru - содержит классы для обращения к nalog.ru сайту
+- parser - содержит классы для парсинга ЕГРЮЛ и ЕГРИП pdf файлов, скаченных с nalog.ru
 ## dadata.ru Классы
 #### APICaller
 Позволяет делать единичные запросы к api.
@@ -316,6 +317,62 @@ manager.start().catch(console.log);
   }
 })();
 ```
+#### Parser
+Позволяет парсить скаченные с nalog.ru ЕГРЮЛ и ЕГРИП pdf файлы.
+
+[Примеры использования](src/parser/examples/parser.js)
+```javascript
+const Parser = require('../Parser');
+
+const parser = new Parser();
+
+// Parse egrul or egrip pdf file
+parser
+  .parse('path_to_pdf_file')
+  .then((data) => console.log(JSON.stringify(data, null, 2)))
+  .catch((err) => console.log(err));
+```
+#### Parsing Manager
+Позволяет управлять процессом парсинга скаченных с nalog.ru ЕГРЮЛ и ЕГРИП pdf файлов с помощью sqlite базы данных и worker thread pool, в том числе читать директорию с pdf файлами, парсить их в нескольких worker threads, логировать ошибки и успешный парсинг, получать отчеты о выполненном парсинге.
+
+[Примеры использования](src/parser/examples/parsingManager.js)
+```javascript
+const ParsingManager = require('../ParsingManager');
+const extractData = require('../extractData');
+
+// inputPath is a path to a directory with egrul and egrip pdf files to parse
+// extractData is a function that allows to extract the required fields from data objects
+const manager = new ParsingManager({
+  inputPath: 'path_to_directory_with_pdf_files',
+  extractData,
+});
+
+manager.start().catch(console.log);
+
+// The database can accumulate data parsed over several executions
+
+// So you can get currently parsed data
+// As json files
+manager.getResult().catch(console.log);
+
+// As arrays od data objects of required length
+(async function () {
+  for await (const data of manager.getResultAsArrays()) {
+    console.log(JSON.stringify(data, null, 2));
+  }
+})();
+
+// Or you can get all data accumulated in the database
+// As json files
+manager.getAllContent().catch(console.log);
+
+// As arrays od data objects of required length
+(async function () {
+  for await (const data of manager.getAllContentAsArrays()) {
+    console.log(JSON.stringify(data, null, 2));
+  }
+})();
+```
 
 ## Установка
 1. Клонируйте репозиторий
@@ -342,7 +399,7 @@ manager.start().catch(console.log);
 #### apiCaller.makeRequest(query) ⇒ <code>Promise</code>
 Gets information about the company found by query parameters
  
-**Returns**: <code>Promise</code> - Promise object represents data object  
+**Returns**: <code>Promise</code> - promise object represents data object  
 **Throws**:
 
 - <code>ValidationError</code> - if an invalid request was made
@@ -368,8 +425,7 @@ Gets information about the company found by query parameters
 #### apiMultiCaller.makeRequests(queries) ⇒ <code>Promise</code>
 Gets information for the companies found by query parameters
 
-**Returns**: <code>Promise</code> - Promise object represents an array of arrays of inns
-or arrays of data objects, composed by status of result and type of errors  
+**Returns**: <code>Promise</code> - promise object represents an array of arrays of inns or arrays of data objects, composed by status of result and type of errors  
 
 | Param | Type | Description |
 | --- | --- | --- |
@@ -378,7 +434,7 @@ or arrays of data objects, composed by status of result and type of errors
 #### apiMultiCaller.getDataObjects(queries) ⇒ <code>Promise</code>
 Gets information about the companies found by query parameters
 
-**Returns**: <code>Promise</code> - Promise object represents an array of data objects  
+**Returns**: <code>Promise</code> - promise object represents an array of data objects  
 
 | Param | Type | Description |
 | --- | --- | --- |
@@ -407,7 +463,7 @@ Gets information about the companies found by query parameters
 #### apiRequestManager.start() ⇒ <code>Promise</code>
 Launches the request process
 
-**Returns**: <code>Promise</code> - Promise object represents void  
+**Returns**: <code>Promise</code> - promise object represents void  
 
 ### Class: APIRequestManagerDb
 #### new APIRequestManagerDb([options])
@@ -434,8 +490,7 @@ Launches the request process
 Writes a report with statistics on downloads
 
 #### apiRequestManagerDb.writeErrors() ⇒ <code>void</code>
-Writes a file with a list of inns, on which some network error occurred
-and they require re-request, and a file with a list of invalid inns
+Writes a file with a list of inns, on which some network error occurred and they require re-request, and a file with a list of invalid inns
 
 #### apiRequestManagerDb.generateReport() ⇒ <code>void</code>
 Writes a report with statistics on downloads and files with lists of inns with errors
@@ -452,7 +507,7 @@ Cleans after the request process
 #### apiRequestManagerDb.start() ⇒ <code>Promise</code>
 Launches the request process
 
-**Returns**: <code>Promise</code> - Promise object represents void  
+**Returns**: <code>Promise</code> - promise object represents void  
 
 ### Class: Downloader
 #### new Downloader([options])
@@ -468,7 +523,7 @@ Launches the request process
 #### downloader.getMetadataByInn(inn) ⇒ <code>Promise</code>
 Gets company metadata by its inn. It is assumed, that only one company can be found, so length of the array of meta dada objects will be 1.
  
-**Returns**: <code>Promise</code> - Promise object represents an array of metadata objects  
+**Returns**: <code>Promise</code> - promise object represents an array of metadata objects  
 **Throws**:
 
 - <code>ValidationError</code> - if no company is found
@@ -482,7 +537,7 @@ Gets company metadata by its inn. It is assumed, that only one company can be fo
 #### downloader.getMetadata(params) ⇒ <code>Promise</code>
 Gets metadata of the companies found by query parameters
 
-**Returns**: <code>Promise</code> - Promise object represents an array of metadata objects  
+**Returns**: <code>Promise</code> - promise object represents an array of metadata objects  
 
 | Param | Type | Description |
 | --- | --- | --- |
@@ -514,7 +569,7 @@ Converts metadata of the companies according to map
 #### downloader.getMetadataObjects(params) ⇒ <code>Promise</code>
 Gets metadata of the companies by query parameters and convert it
 
-**Returns**: <code>Promise</code> - Promise object represents an array of converted metadata objects  
+**Returns**: <code>Promise</code> - promise object represents an array of converted metadata objects  
 
 | Param | Type | Description |
 | --- | --- | --- |
@@ -526,7 +581,7 @@ Gets metadata of the companies by query parameters and convert it
 #### downloader.getDocByInn(inn) ⇒ <code>Promise</code>
 Gets EGRUL pdf document on the company by its inn. It is assumed, that only one company or none can be found, so only one pdf file or none will be downloaded.
  
-**Returns**: <code>Promise</code> - Promise object represents company inn  
+**Returns**: <code>Promise</code> - promise object represents company inn  
 **Throws**:
 
 - <code>ValidationError</code> - if no company is found
@@ -540,7 +595,7 @@ Gets EGRUL pdf document on the company by its inn. It is assumed, that only one 
 #### downloader.getDocs(params) ⇒ <code>Promise</code>
 Gets EGRUL pdf documents on the companies found by query parameters
 
-**Returns**: <code>Promise</code> - Promise object represents void  
+**Returns**: <code>Promise</code> - promise object represents void  
 
 | Param | Type | Description |
 | --- | --- | --- |
@@ -563,8 +618,7 @@ Gets EGRUL pdf documents on the companies found by query parameters
 #### multiDownloader.getDocsByInn(queries) ⇒ <code>Promise</code>
 Gets EGRUL pdf documents on the companies found by inns
 
-**Returns**: <code>Promise</code> - Promise object represents an array of arrays of inns,
-composed by status of result and type of errors  
+**Returns**: <code>Promise</code> - promise object represents an array of arrays of inns, composed by status of result and type of errors  
 
 | Param | Type | Description |
 | --- | --- | --- |
@@ -573,8 +627,7 @@ composed by status of result and type of errors
 #### multiDownloader.getMetadataByInn(queries) ⇒ <code>Promise</code>
 Gets metadata of the companies found by inns
 
-**Returns**: <code>Promise</code> - Promise object represents an array of arrays of inns
-or arrays of metadata objects, composed by status of result and type of errors  
+**Returns**: <code>Promise</code> - promise object represents an array of arrays of inns or arrays of metadata objects, composed by status of result and type of errors  
 
 | Param | Type | Description |
 | --- | --- | --- |
@@ -583,7 +636,7 @@ or arrays of metadata objects, composed by status of result and type of errors
 #### multiDownloader.getDocs(queries) ⇒ <code>Promise</code>
 Gets EGRUL pdf documents on the companies found by query parameters
 
-**Returns**: <code>Promise</code> - Promise object represents void  
+**Returns**: <code>Promise</code> - promise object represents void  
 
 | Param | Type | Description |
 | --- | --- | --- |
@@ -595,7 +648,7 @@ Gets EGRUL pdf documents on the companies found by query parameters
 #### multiDownloader.getMetadata(queries) ⇒ <code>Promise</code>
 Gets metadata of the companies found by query parameters
 
-**Returns**: <code>Promise</code> - Promise object represents an array of metadata objects  
+**Returns**: <code>Promise</code> - promise object represents an array of metadata objects  
 
 | Param | Type | Description |
 | --- | --- | --- |
@@ -625,7 +678,7 @@ Converts metadata of the companies according to map
 ### multiDownloader.getMetadataObjects(queries) ⇒ <code>Promise</code>
 Gets converted metadata of the companies found by query parameters
 
-**Returns**: <code>Promise</code> - Promise object represents an array of converted metadata objects  
+**Returns**: <code>Promise</code> - promise object represents an array of converted metadata objects  
 
 | Param | Type | Description |
 | --- | --- | --- |
@@ -657,8 +710,7 @@ Gets converted metadata of the companies found by query parameters
 Writes a report with statistics on downloads
 
 #### metadataRequestManagerDb.writeErrors() ⇒ <code>void</code>
-Writes a file with a list of inns, on which some network error occurred
-and they require re-request, and a file with a list of invalid inns
+Writes a file with a list of inns, on which some network error occurred and they require re-request, and a file with a list of invalid inns
 
 #### metadataRequestManagerDb.generateReport() ⇒ <code>void</code>
 Writes a report with statistics on downloads and files with lists of inns with errors
@@ -675,7 +727,7 @@ Cleans after the request process
 #### metadataRequestManagerDb.start() ⇒ <code>Promise</code>
 Launches the request process
 
-**Returns**: <code>Promise</code> - Promise object represents void  
+**Returns**: <code>Promise</code> - promise object represents void  
 
 ### Class: PDFRequestManagerDb
 #### new PDFRequestManagerDb([options])
@@ -708,7 +760,132 @@ Cleans after the request process
 #### pdfRequestManagerDb.start() ⇒ <code>Promise</code>
 Launches the request process
 
-**Returns**: <code>Promise</code> - Promise object represents void  
+**Returns**: <code>Promise</code> - promise object represents void  
+
+### Class: Parser
+#### new Parser()
+
+#### parser.read(path) ⇒ <code>Promise</code>
+Reads a pdf file and create a map with coordinate, style and content information for each page
+ 
+**Returns**: <code>Promise</code> - promise object represents an array of maps with information about the file content  
+
+| Param | Type | Description |
+| --- | --- | --- |
+| path | <code>string</code> | pdf file path |
+
+<a name="Parser+convert"></a>
+
+#### parser.convert(rowData) ⇒ <code>Object</code>
+Converts content into key: value object with consideration of headers
+ 
+**Returns**: <code>Object</code> - object with file content (keys in Russian)  
+
+| Param | Type | Description |
+| --- | --- | --- |
+| rowData | <code>Array.&lt;Map&gt;</code> | array of maps with information about the file content |
+
+#### parser.parse(path) ⇒ <code>Promise</code>
+Parses EGRUL (EGRIP) pdf file
+ 
+**Returns**: <code>Promise</code> - promise object represents an object with normalized file content  
+
+| Param | Type | Description |
+| --- | --- | --- |
+| path | <code>string</code> | pdf file path |
+
+### Class: ParsingManager
+#### new ParsingManager([options])
+| Param | Type | Default | Description |
+| --- | --- | --- | --- |
+| [options] | <code>Object</code> | <code>{}</code> | configuration settings |
+| [options.inputPath] | <code>string</code> | <code>null</code> | path to a directory with egrul pdf files to parse |
+| [options.outputDir] | <code>string</code> | <code>&quot;output&quot;</code> | name of directory for output files |
+| [options.logsDir] | <code>string</code> | <code>&quot;logs&quot;</code> | name of directory with logs files |
+| [options.reportsDir] | <code>string</code> | <code>&quot;reports&quot;</code> | name of directory with reports |
+| [options.workingDir] | <code>string</code> | <code>process.cwd()</code> | path to directory where  the all other directories and files will be created |
+| [options.dbFile] | <code>string</code> | <code>&quot;parsedPDF.db&quot;</code> | name of a sqlite database file |
+| [options.dbPath] | <code>string</code> | <code>resolve(this.workingDir, this.dbFile)</code> | path  to a sqlite database file |
+| [options.cleanDB] | <code>boolean</code> | <code>false</code> | clean or not the table with json data |
+| [options.numberOfThreads] | <code>number</code> | <code>os.cpus().length</code> | number of worker threads |
+| [options.pdfLength] | <code>number</code> | <code>100</code> | number of pdf files simultaneously sent to a worker pool |
+| [options.pdfObjectsPerFile] | <code>number</code> | <code>500</code> | number of json objects per an output file |
+| [options.pdfObjectsPerArray] | <code>number</code> | <code>500</code> | number of data objects per an output array |
+| [options.extractData] | <code>function</code> | <code>null</code> | extracts the required fields from an egrul object |
+
+#### parsingManager.getResult([outputPath]) ⇒ <code>Promise</code>
+Writes output files with json data for paths from paths table
+
+**Returns**: <code>Promise</code> - promise object represents void  
+
+| Param | Type | Default | Description |
+| --- | --- | --- | --- |
+| [outputPath] | <code>string</code> | <code>null</code> | path to an output directory |
+
+#### parsingManager.getAllContent([outputPath]) ⇒ <code>Promise</code>
+Writes output files with all json data from jsons table
+ 
+**Returns**: <code>Promise</code> - promise object represents void  
+
+| Param | Type | Default | Description |
+| --- | --- | --- | --- |
+| [outputPath] | <code>string</code> | <code>null</code> | path to an output directory |
+
+#### parsingManager.getResultAsArrays() ⇒ <code>Promise</code>
+Generates arrays of the required length with data objects for paths from paths table
+ 
+**Yields**: <code>Promise</code> - promise object represents an array of the required length with data objects
+
+#### parsingManager.getAllContentAsArrays() ⇒ <code>Promise</code>
+Generates arrays of the required length with data objects from jsons table
+
+**Yields**: <code>Promise</code> - promise object represents an array of the required length with data objects
+ 
+#### parsingManager.writeReport() ⇒ <code>Promise</code>
+Writes a report with statistics on parsing
+
+**Returns**: <code>Promise</code> - promise object represents void  
+
+#### parsingManager.writeErrors() ⇒ <code>Promise</code>
+Writes a file with a list of paths, on which an error occurred
+  
+**Returns**: <code>Promise</code> - promise object represents void  
+
+#### parsingManager.generateReport() ⇒ <code>Promise</code>
+Writes a report with statistics on parsing and a file with a list of paths, on which an error occurred
+ 
+**Returns**: <code>Promise</code> - promise object represents void  
+
+#### parsingManager.start([resume]) ⇒ <code>Promise</code>
+Launches the parsing process
+ 
+**Returns**: <code>Promise</code> - promise object represents void  
+
+| Param | Type | Default | Description |
+| --- | --- | --- | --- |
+| [resume] | <code>boolean</code> | <code>false</code> | true, if resume the parsing process  after it was interrupted for some reason |
+
+### Class: WorkerPool
+#### new WorkerPool(workerPath, [numberOfThreads])
+
+| Param | Type | Default | Description |
+| --- | --- | --- | --- |
+| workerPath | <code>string</code> |  | file path to worker implementation |
+| [numberOfThreads] | <code>number</code> | <code>os.cpus().length</code> | number of worker threads |
+
+#### workerPool.run(path) ⇒ <code>Promise</code>
+Executes the task
+ 
+**Returns**: <code>Promise</code> - promise object represents a data object received from a worker thread after the task was done  
+
+| Param | Type | Description |
+| --- | --- | --- |
+| path | <code>string</code> | path to a pdf file |
+
+#### workerPool.clean() ⇒ <code>Promise</code>
+Cleans before finishing
+
+**Returns**: <code>Promise</code> - promise object represents void  
 
 ### Class: Logger
 #### new Logger([options])
@@ -733,4 +910,4 @@ Logs a message to a specific file depending on the message type
 #### logger.closeStreams() ⇒ <code>Promise</code>
 Closes message streams
  
-**Returns**: <code>Promise</code> - Promise object represents void  
+**Returns**: <code>Promise</code> - promise object represents void  

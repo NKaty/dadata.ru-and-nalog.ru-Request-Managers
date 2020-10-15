@@ -13,6 +13,7 @@ class Logger {
    * @param {Object} [options={}] - configuration settings
    * @param {string} [options.mode='w'] - flag, that indicates in what mode files
    *  should be opened for logging
+   * @param {?string} [options.parsingErrorPath=null] - path to file to log parsing errors
    * @param {?string} [options.retryErrorPath=null] - path to file to log network errors to retry
    * @param {?string} [options.validationErrorPath=null] - path to file to log validation errors
    * @param {?string} [options.generalErrorPath=null] - path to file to log general errors
@@ -21,12 +22,15 @@ class Logger {
   constructor(options = {}) {
     this.mode = options.mode || 'w';
     this._pathTypes = {
+      parsingError: options.parsingErrorPath || null,
       retryError: options.retryErrorPath || null,
       validationError: options.validationErrorPath || null,
       generalError: options.generalErrorPath || null,
       success: options.successPath || null,
     };
+
     this._streamTypes = {
+      parsingError: null,
       retryError: null,
       validationError: null,
       generalError: null,
@@ -51,14 +55,16 @@ class Logger {
    */
   log(type, message, ...args) {
     try {
-      args = args.filter((item) => item.length);
+      args = args.filter((item) => item !== undefined && item !== null && item.length);
       const info = args.length ? `${args.join(', ')} ` : '';
       const stream = this._getStream(type);
-      if (message instanceof Error) console.log(`${info}${message.stack}`);
-      if (type === 'generalError' && stream) {
-        stream.write(`${getDate(true)} ${info}${message.stack}\n`);
-      } else {
-        stream && stream.write(`${getDate(true)} ${info}${message}\n`);
+      if (message instanceof Error && message.stack) console.log(`${info}${message.stack}`);
+      if (stream) {
+        if (type === 'generalError' && message instanceof Error && message.stack) {
+          stream.write(`${getDate(true)} ${info}${message.stack}\n`);
+        } else {
+          stream.write(`${getDate(true)} ${info}${message}\n`);
+        }
       }
     } catch (err) {
       console.log(err);
