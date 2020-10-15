@@ -1,7 +1,7 @@
 {
-  "name": "request-managers",
+  "name": "request-parsing-managers",
   "version": "1.0.0",
-  "description": "Request managers for making requests to dadata.ru API and nalog.ru website",
+  "description": "Request managers for making requests to dadata.ru API and nalog.ru website, parsing manager for egrul and egrip pdf files.",
   "main": "index.js",
   "repository": {
     "type": "git",
@@ -10,25 +10,25 @@
   "author": "NKaty",
   "license": "ISC",
   "devDependencies": {
-    "eslint": "^7.8.1",
-    "eslint-config-prettier": "^6.11.0",
+    "eslint": "^7.11.0",
+    "eslint-config-prettier": "^6.12.0",
     "eslint-config-standard": "^14.1.1",
-    "eslint-plugin-import": "^2.22.0",
+    "eslint-plugin-import": "^2.22.1",
     "eslint-plugin-node": "^11.1.0",
     "eslint-plugin-prettier": "^3.1.4",
     "eslint-plugin-promise": "^4.2.1",
     "eslint-plugin-standard": "^4.0.1",
     "husky": "^4.3.0",
-    "lint-staged": "^10.3.0",
-    "prettier": "^2.1.1"
+    "lint-staged": "^10.4.0",
+    "prettier": "^2.1.2"
   },
   "dependencies": {
     "better-sqlite3": "^7.1.0",
     "dotenv": "^8.2.0",
     "node-fetch": "^2.6.1",
-    "pdfreader": "^1.0.7",
+    "pdfreader": "^1.2.6",
     "promise-ratelimit": "0.0.3",
-    "promise-throttle": "^1.1.1"
+    "promise-throttle": "^1.1.2"
   },
   "scripts": {
     "lint:check": "eslint . --ext=js --max-warnings=0;  exit 0",
