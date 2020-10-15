@@ -510,6 +510,18 @@ module.exports = (data) => {
           ),
         }
       : null,
+    managing_company: getData(data, 'Сведения об управляющей организации')
+      ? {
+          name: getData(data, 'Сведения об управляющей организации', 'Полное наименование'),
+          ogrn: getData(data, 'Сведения об управляющей организации', 'ОГРН'),
+          inn: getData(data, 'Сведения об управляющей организации', 'ИНН'),
+          additional_info: getData(
+            data,
+            'Сведения об управляющей организации',
+            'Дополнительные сведения'
+          ),
+        }
+      : null,
     reorganization: getReorganizationObject(getData(data, 'Сведения о реорганизации')),
     predecessors: getObjects(
       getData(data, 'Сведения о правопредшественнике'),
