@@ -22,8 +22,6 @@ const getName = (data) => {
 };
 
 const getINN = (data) => {
-  if (getData(data, 'Сведения о реорганизации'))
-    console.log(getData(data, 'Сведения об учете в налоговом органе', 'ИНН'));
   return (
     getData(data, 'Сведения об учете в налоговом органе', 'ИНН') ||
     getData(
@@ -478,7 +476,19 @@ module.exports = (data) => {
     address: getAddressObject(getData(data, 'Адрес (место нахождения)')),
     registration: getRegistrationObject(data),
     liquidation: getLiquidationObject(data),
-    state: getData(data, 'Сведения о состоянии юридического лица', 'Состояние'),
+    status: checkIsObjectEmpty({
+      state: getData(data, 'Сведения о состоянии юридического лица', 'Состояние'),
+      decision_date: getData(
+        data,
+        'Сведения о состоянии юридического лица',
+        'Дата принятия решения о предстоящем исключении недействующего юридического лица из ЕГРЮЛ'
+      ),
+      publish_date: getData(
+        data,
+        'Сведения о состоянии юридического лица',
+        'Сведения о публикации решения о предстоящем исключении недействующего юридического лица из ЕГРЮЛ в журнале «Вестник государственной регистрации»'
+      ),
+    }),
     okveds: getOKVEDObjects(
       getData(
         data,
