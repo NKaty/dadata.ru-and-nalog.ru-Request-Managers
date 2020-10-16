@@ -3,12 +3,17 @@
 let type = null;
 
 const getData = (data, ...fields) => {
+  if (data === null || data === undefined) return null;
   let value = data;
   for (const field of fields) {
     if (value[field] === undefined) return null;
     value = value[field];
   }
   return value;
+};
+
+const checkIsObjectEmpty = (obj) => {
+  return Object.values(obj).every((item) => item === null) ? null : obj;
 };
 
 const getName = (data) => {
@@ -78,11 +83,36 @@ const getAddressObject = (address) => {
   ]);
   let fullAddress = '';
   addressMap.forEach((value, key) => {
-    if (value !== null && key !== 'additional_info') fullAddress += `${value}, `;
+    if (value !== null && value !== '-' && value !== '--' && key !== 'additional_info')
+      fullAddress += `${value}, `;
   });
   if (!fullAddress && !addressMap.get('additional_info')) return null;
   addressMap.set('full_address', fullAddress.slice(0, -2));
   return Object.fromEntries(addressMap.entries());
+};
+
+const getPreviousRegistrationObject = (prevReg, type) => {
+  const prevRegNumberField =
+    type === 'legal'
+      ? 'Регистрационный номер, присвоенный до 1 июля 2002 года'
+      : 'Регистрационный номер, присвоенный до 1 января 2004 года';
+  const prevRegDateField =
+    type === 'legal'
+      ? 'Дата регистрации до 1 июля 2002 года'
+      : 'Дата регистрации до 1 января 2004 года';
+  return {
+    prev_reg_number: getData(prevReg, prevRegNumberField),
+    prev_reg_date: getData(prevReg, prevRegDateField),
+    prev_reg_authority:
+      getData(
+        prevReg,
+        'Наименование органа, зарегистрировавшего юридическое лицо до 1 июля 2002 года'
+      ) ||
+      getData(
+        prevReg,
+        'Наименование органа, зарегистрировавшего юридического лица до 1 июля 2002 года'
+      ),
+  };
 };
 
 const getRegistrationObject = (data) => {
@@ -92,31 +122,15 @@ const getRegistrationObject = (data) => {
       : getData(data, 'Сведения о регистрации индивидуального предпринимателя') !== null
       ? 'Сведения о регистрации индивидуального предпринимателя'
       : 'Сведения о регистрации крестьянского (фермерского) хозяйства';
-  const prevRegNumberField =
-    type === 'legal'
-      ? 'Регистрационный номер, присвоенный до 1 июля 2002 года'
-      : 'Регистрационный номер, присвоенный до 1 января 2004 года';
-  const prevRegDateField =
-    type === 'legal'
-      ? 'Дата регистрации до 1 июля 2002 года'
-      : 'Дата регистрации до 1 января 2004 года';
   const crimeaRegField =
     'Сведения о регистрации на территории Республики Крым или территории города федерального значения Севастополя на день принятия в Российскую Федерацию Республики Крым и образования в составе Российской Федерации новых субъектов - Республики Крым и города федерального значения Севастополя';
   const registrationObject = {
     method: getData(data, regField, 'Способ образования'),
-    prev_reg_number: getData(data, regField, prevRegNumberField),
-    prev_reg_date: getData(data, regField, prevRegDateField),
-    prev_reg_authority: getData(
-      data,
-      regField,
-      'Наименование органа, зарегистрировавшего юридическое лицо до 1 июля 2002 года'
-    ),
+    ...getPreviousRegistrationObject(getData(data, regField), type),
     crimea_reg_number: getData(data, regField, crimeaRegField, 'Регистрационный номер'),
     crimea_reg_date: getData(data, regField, crimeaRegField, 'Дата регистрации'),
   };
-  return Object.values(registrationObject).every((item) => item === null)
-    ? null
-    : registrationObject;
+  return checkIsObjectEmpty(registrationObject);
 };
 
 const getAuthoritiesObject = (data) => {
@@ -248,17 +262,32 @@ const getFounderObject = (founder) => {
   const managerField =
     'Сведения об органе государственной власти, органе местного самоуправления, юридическом лице, осуществляющем права учредителя (участника)';
   return {
-    name:
-      getName(founder) ||
-      getData(founder, 'Полное наименование') ||
-      getData(founder, managerField, 'Полное наименование'),
-    inn: getData(founder, 'ИНН') || getData(founder, managerField, 'ИНН'),
-    ogrn: getData(founder, 'ОГРН') || getData(founder, managerField, 'ОГРН'),
+    name: getName(founder) || getData(founder, 'Полное наименование'),
+    inn: getData(founder, 'ИНН'),
+    ogrn: getData(founder, 'ОГРН'),
+    prev_reg: checkIsObjectEmpty(
+      getPreviousRegistrationObject(founder, getType(getData(founder, 'ИНН')))
+    ),
     region: getData(founder, 'Субъект Российской Федерации'),
     area: getData(founder, 'Муниципальное образование'),
-    organization_role: getData(founder, managerField) ? managerField : null,
+    company_exercising_founder_rights: getObjects(getData(founder, managerField), (companies) => ({
+      name: getData(companies, 'Полное наименование'),
+      inn: getData(companies, 'ИНН'),
+      ogrn: getData(companies, 'ОГРН'),
+      prev_reg: checkIsObjectEmpty(
+        getPreviousRegistrationObject(companies, getType(getData(companies, 'ИНН')))
+      ),
+    })),
+    for_foreign_company: checkIsObjectEmpty({
+      country: getData(founder, 'Страна происхождения'),
+      reg_date: getData(founder, 'Дата регистрации'),
+      reg_number: getData(founder, 'Регистрационный номер'),
+      reg_authority: getData(founder, 'Наименование регистрирующего органа'),
+      origin_address: getData(founder, 'Адрес (место нахождения) в стране происхождения'),
+    }),
     share_nominal: getData(founder, 'Номинальная стоимость доли (в рублях)'),
     share_percent: getData(founder, 'Размер доли (в процентах)'),
+    share_fraction: getData(founder, 'Размер доли (в виде простой дроби)'),
     pledge: getData(founder, 'Сведения об обременении')
       ? {
           type: getData(founder, 'Сведения об обременении', 'Вид обременения'),
@@ -271,7 +300,9 @@ const getFounderObject = (founder) => {
             ? {
                 ogrn: getData(founder, 'Сведения о залогодержателе', 'ОГРН'),
                 inn: getData(founder, 'Сведения о залогодержателе', 'ИНН'),
-                name: getData(founder, 'Сведения о залогодержателе', 'Полное наименование'),
+                name:
+                  getData(founder, 'Сведения о залогодержателе', 'Полное наименование') ||
+                  getName(getData(founder, 'Сведения о залогодержателе')),
               }
             : null,
           contract: getData(founder, 'Сведения о нотариальном удостоверении договора залога')
@@ -411,13 +442,15 @@ const getSuccessorObject = (successor) => {
 
 const getObjects = (data, getObject) => {
   if (data === null) return null;
-  if (Object.keys(data)[0] !== '1') return [getObject(data)];
-  return Object.values(data).map((item) => getObject(item));
+  if (!Object.keys(data).filter((key) => key === '1').length) return [getObject(data)];
+  return Object.keys(data)
+    .filter((key) => key !== 'Дополнительный заголовок')
+    .map((key) => getObject(data[key]));
 };
 
 /**
- * @desc Extracts data from parsed egrul pdf files
- * @param {Object} data - an object representing a parsed egrul pdf file
+ * @desc Extracts data from parsed egrul and egrip pdf files
+ * @param {Object} data - an object representing a parsed egrul (egrip) pdf file
  * @returns {Object} - an object with data
  */
 module.exports = (data) => {
