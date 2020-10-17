@@ -46,7 +46,7 @@ const getNameObject = (data) => {
     if (name === null) return null;
     fio = getName(name);
     latin = [name['Фамилия (латинскими буквами)'], name['Имя (латинскими буквами)']]
-      .filter((item) => !!item)
+      .filter((item) => !!item && item !== '-' && item !== '--')
       .join(' ');
     return {
       full: fio ? `ИНДИВИДУАЛЬНЫЙ ПРЕДПРИНИМАТЕЛЬ ${fio}` : null,
@@ -101,18 +101,14 @@ const getPreviousRegistrationObject = (prevReg, type) => {
     type === 'legal'
       ? 'Дата регистрации до 1 июля 2002 года'
       : 'Дата регистрации до 1 января 2004 года';
+  const prevRegAuthorityField =
+    type === 'legal'
+      ? 'Наименование органа, зарегистрировавшего юридическое лицо до 1 июля 2002 года'
+      : 'Наименование органа, зарегистрировавшего индивидуального предпринимателя до 1 января 2004 года';
   return {
     prev_reg_number: getData(prevReg, prevRegNumberField),
     prev_reg_date: getData(prevReg, prevRegDateField),
-    prev_reg_authority:
-      getData(
-        prevReg,
-        'Наименование органа, зарегистрировавшего юридическое лицо до 1 июля 2002 года'
-      ) ||
-      getData(
-        prevReg,
-        'Наименование органа, зарегистрировавшего юридического лица до 1 июля 2002 года'
-      ),
+    prev_reg_authority: getData(prevReg, prevRegAuthorityField),
   };
 };
 
@@ -143,7 +139,12 @@ const getAuthoritiesObject = (data) => {
           'Сведения о регистрирующем органе по месту жительства индивидуального предпринимателя'
         ) !== null
       ? 'Сведения о регистрирующем органе по месту жительства индивидуального предпринимателя'
-      : 'Сведения о регистрирующем органе по месту жительства главы крестьянского (фермерского) хозяйстве';
+      : getData(
+          data,
+          'Сведения о регистрирующем органе по месту жительства главы крестьянского (фермерского) хозяйстве'
+        ) !== null
+      ? 'Сведения о регистрирующем органе по месту жительства главы крестьянского (фермерского) хозяйстве'
+      : 'Сведения о регистрирующем органе по месту жительства главы крестьянского (фермерского) хозяйства';
   const ftsRegistration = getData(data, ftsRegFieldName);
   const ftsReport = getData(data, 'Сведения об учете в налоговом органе');
   const pf = getData(
@@ -391,23 +392,23 @@ const getBranchObject = (branch) => {
 
 const getReorganizationObject = (reorganization) => {
   if (reorganization === null) return null;
+  const participants =
+    getData(reorganization, 'Сведения о юридических лицах, участвующих  в реорганизации') ||
+    getData(reorganization, 'Сведения о юридических лицах, участвующих в реорганизации');
   return {
     type: getData(reorganization, 'Форма реорганизации'),
-    participants: getObjects(
-      getData(reorganization, 'Сведения о юридических лицах, участвующих  в реорганизации'),
-      (participant) => {
-        if (participant === null) return null;
-        return {
-          ogrn: getData(participant, 'ОГРН'),
-          inn: getData(participant, 'ИНН'),
-          name: getData(participant, 'Полное наименование'),
-          status_after: getData(
-            participant,
-            'Состояние юридического лица после завершения реорганизации'
-          ),
-        };
-      }
-    ),
+    participants: getObjects(participants, (participant) => {
+      if (participant === null) return null;
+      return {
+        ogrn: getData(participant, 'ОГРН'),
+        inn: getData(participant, 'ИНН'),
+        name: getData(participant, 'Полное наименование'),
+        status_after: getData(
+          participant,
+          'Состояние юридического лица после завершения реорганизации'
+        ),
+      };
+    }),
   };
 };
 
@@ -438,9 +439,9 @@ const getObjects = (data, getObject) => {
 };
 
 /**
- * @desc Extracts data from parsed egrul and egrip pdf files
+ * @desc Extracts and normalizes data from parsed egrul and egrip pdf files
  * @param {Object} data - an object representing a parsed egrul (egrip) pdf file
- * @returns {Object} - an object with data
+ * @returns {Object} - a normalized object with data
  */
 module.exports = (data) => {
   const inn = getINN(data);
