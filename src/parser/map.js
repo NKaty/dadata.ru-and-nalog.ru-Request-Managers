@@ -106,9 +106,9 @@ const getPreviousRegistrationObject = (prevReg, type) => {
       ? 'Наименование органа, зарегистрировавшего юридическое лицо до 1 июля 2002 года'
       : 'Наименование органа, зарегистрировавшего индивидуального предпринимателя до 1 января 2004 года';
   return {
-    prev_reg_number: getData(prevReg, prevRegNumberField),
-    prev_reg_date: getData(prevReg, prevRegDateField),
-    prev_reg_authority: getData(prevReg, prevRegAuthorityField),
+    number: getData(prevReg, prevRegNumberField),
+    date: getData(prevReg, prevRegDateField),
+    authority: getData(prevReg, prevRegAuthorityField),
   };
 };
 
@@ -123,9 +123,11 @@ const getRegistrationObject = (data) => {
     'Сведения о регистрации на территории Республики Крым или территории города федерального значения Севастополя на день принятия в Российскую Федерацию Республики Крым и образования в составе Российской Федерации новых субъектов - Республики Крым и города федерального значения Севастополя';
   const registrationObject = {
     method: getData(data, regField, 'Способ образования'),
-    ...getPreviousRegistrationObject(getData(data, regField), type),
-    crimea_reg_number: getData(data, regField, crimeaRegField, 'Регистрационный номер'),
-    crimea_reg_date: getData(data, regField, crimeaRegField, 'Дата регистрации'),
+    prev_reg: checkIsObjectEmpty(getPreviousRegistrationObject(getData(data, regField), type)),
+    crimea: checkIsObjectEmpty({
+      reg_number: getData(data, regField, crimeaRegField, 'Регистрационный номер'),
+      reg_date: getData(data, regField, crimeaRegField, 'Дата регистрации'),
+    }),
   };
   return checkIsObjectEmpty(registrationObject);
 };
@@ -172,14 +174,14 @@ const getAuthoritiesObject = (data) => {
       ? {
           name: getData(pf, 'Наименование территориального органа Пенсионного фонда'),
           date: getData(pf, 'Дата регистрации'),
-          registration_number: getData(pf, 'Регистрационный номер'),
+          reg_number: getData(pf, 'Регистрационный номер'),
         }
       : null,
     sif: sif
       ? {
           name: getData(sif, 'Наименование исполнительного органа Фонда социального страхования'),
           date: getData(sif, 'Дата регистрации'),
-          registration_number: getData(sif, 'Регистрационный номер'),
+          reg_number: getData(sif, 'Регистрационный номер'),
         }
       : null,
   };
@@ -272,15 +274,12 @@ const getFounderObject = (founder) => {
     ),
     region: getData(founder, 'Субъект Российской Федерации'),
     area: getData(founder, 'Муниципальное образование'),
-    company_exercising_founder_rights: getObjects(getData(founder, managerField), (companies) => ({
+    founder_rights: getObjects(getData(founder, managerField), (companies) => ({
       name: getData(companies, 'Полное наименование'),
       inn: getData(companies, 'ИНН'),
       ogrn: getData(companies, 'ОГРН'),
-      prev_reg: checkIsObjectEmpty(
-        getPreviousRegistrationObject(companies, getType(getData(companies, 'ИНН')))
-      ),
     })),
-    for_foreign_company: checkIsObjectEmpty({
+    for_foreign: checkIsObjectEmpty({
       country: getData(founder, 'Страна происхождения'),
       reg_date: getData(founder, 'Дата регистрации'),
       reg_number: getData(founder, 'Регистрационный номер'),
@@ -333,8 +332,11 @@ const getFounderObject = (founder) => {
         'Сведения о доверительном управляющем',
         'Дата открытия наследства'
       ),
-      name: getName(getData(founder, 'Сведения о доверительном управляющем')),
+      name:
+        getName(getData(founder, 'Сведения о доверительном управляющем')) ||
+        getData(founder, 'Сведения о доверительном управляющем', 'Полное наименование'),
       inn: getData(founder, 'Сведения о доверительном управляющем', 'ИНН'),
+      ogrn: getData(founder, 'Сведения о доверительном управляющем', 'ОГРН'),
     }),
     additional_info: getData(founder, 'Дополнительные сведения'),
   };
@@ -377,9 +379,9 @@ const getBranchObject = (branch) => {
   const fts = getData(branch, 'Сведения об учете в налоговом органе по месту нахождения филиала');
   return {
     name: getData(branch, 'Наименование'),
-    country: getData(branch, 'Страна места нахождения'),
-    address_string: getData(branch, 'Адрес места нахождения'),
     address: getAddressObject(branch),
+    country: getData(branch, 'Страна места нахождения'),
+    foreign_address: getData(branch, 'Адрес места нахождения'),
     fts_report: fts
       ? {
           kpp: getData(fts, 'КПП'),
@@ -529,6 +531,11 @@ module.exports = (data) => {
         'Сведения о доле в уставном капитале общества с ограниченной ответственностью, принадлежащей обществу',
         'Размер доли (в процентах)'
       ),
+      share_fraction: getData(
+        data,
+        'Сведения о доле в уставном капитале общества с ограниченной ответственностью, принадлежащей обществу',
+        'Размер доли (в виде простой дроби)'
+      ),
     }),
     managing_company: checkIsObjectEmpty({
       name: getData(data, 'Сведения об управляющей организации', 'Полное наименование'),
@@ -551,7 +558,7 @@ module.exports = (data) => {
         getData(data, 'Сведения о филиалах и представительствах', 'Филиалы'),
         getBranchObject
       ),
-      representative_offices: getObjects(
+      rep_offices: getObjects(
         getData(data, 'Сведения о филиалах и представительствах', 'Представительства'),
         getBranchObject
       ),
