@@ -359,7 +359,9 @@ manager.getResult().catch(console.log);
 // As arrays od data objects of required length
 (async function () {
   for await (const data of manager.getResultAsArrays()) {
-    console.log(JSON.stringify(data, null, 2));
+    for (const item of data) {
+      console.log(JSON.stringify(item, null, 2));
+    }
   }
 })();
 
@@ -370,7 +372,9 @@ manager.getAllContent().catch(console.log);
 // As arrays od data objects of required length
 (async function () {
   for await (const data of manager.getAllContentAsArrays()) {
-    console.log(JSON.stringify(data, null, 2));
+    for (const item of data) {
+      console.log(JSON.stringify(item, null, 2));
+    }
   }
 })();
 ```
