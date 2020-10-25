@@ -41,7 +41,7 @@ class Logger {
   // Gets a proper stream
   _getStream(type) {
     if (!type || !this._pathTypes[type]) type = 'generalError';
-    if (this._streamTypes[type] === null)
+    if (this._streamTypes[type] === null && this._pathTypes[type])
       this._streamTypes[type] = createWriteStream(this._pathTypes[type], { flags: this.mode });
     return this._streamTypes[type];
   }
